@@ -1,0 +1,17 @@
+﻿.DS_Store
+Thumbs.db
+.idea/
+.gradle/
+**/build/
+local.properties
+__pycache__/
+.venv/
+venv/
+.env
+.env.*
+bin/
+obj/
+.azure/
+*.pfx
+*.pem
+*.key

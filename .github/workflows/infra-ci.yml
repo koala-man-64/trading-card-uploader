@@ -1,0 +1,11 @@
+﻿name: infra-ci
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "TODO: add bicep lint/what-if/deploy (OIDC recommended)"
