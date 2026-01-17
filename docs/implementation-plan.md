@@ -6,6 +6,12 @@ Deliver an Android app that captures photos, persists locally, and uploads to Az
 ## Orchestrator Summary
 This plan consolidates inputs from all skills and agents, resolves dependencies, and sequences delivery to maximize security, reliability, and operability.
 
+## Orchestrator Execution Checklist
+- Confirm agent inputs are captured and reconciled (see Agent Feedback, Input, and Signoff).
+- Validate dependencies are documented before build starts.
+- Sequence work so security and IaC precede app upload integration.
+- Require explicit signoff at each phase gate before advancing.
+
 ## Architecture Overview (Condensed)
 1. Android app captures photos via CameraX and writes to app-private storage.
 2. Local Room DB tracks upload jobs with state transitions: Pending → Uploading → Uploaded/Failed.
@@ -30,6 +36,7 @@ This plan consolidates inputs from all skills and agents, resolves dependencies,
 - Apply RBAC: Storage Blob Delegator for user delegation SAS.
 - Configure Function App authentication (Easy Auth / Entra).
 - Optional: diagnostic settings, soft delete, lifecycle policies.
+- **Phase Gate**: Infra deployed from GitHub Actions with OIDC and validated.
 
 ### Phase 2 — SAS Issuer API (Azure Functions)
 - Implement `/v1/uploads:authorize` endpoint:
@@ -38,6 +45,7 @@ This plan consolidates inputs from all skills and agents, resolves dependencies,
   - Issue user delegation SAS with minimal scope and short expiry.
 - Optional `/v1/uploads:complete` endpoint for audit.
 - Add structured logs and Application Insights.
+- **Phase Gate**: Authenticated requests succeed, unauthenticated fail, and SAS scope is single-blob.
 
 ### Phase 3 — Android App (Capture + Offline Queue)
 - CameraX screen to capture and persist file.
@@ -47,17 +55,20 @@ This plan consolidates inputs from all skills and agents, resolves dependencies,
   - PUT upload via OkHttp streaming
   - Update DB state and retry on transient errors
 - Optional status UI for uploads.
+- **Phase Gate**: Offline capture queues uploads; online state triggers upload completion.
 
 ### Phase 4 — CI/CD
 - Android CI: build, test, lint.
 - Infra deploy with GitHub OIDC.
 - Function build/deploy pipeline.
 - Smoke tests for Function API.
+- **Phase Gate**: Required checks enforced on PR and main deploys to dev.
 
 ### Phase 5 — Operational Readiness
 - Runbooks for incident response and recovery.
 - Monitoring/alerting setup.
 - Load testing and capacity sizing.
+- **Phase Gate**: Alerts route to on-call and runbooks validated.
 
 ## Risks and Mitigations
 - **Credential leakage**: Use Entra auth + user delegation SAS; no account keys in app.
