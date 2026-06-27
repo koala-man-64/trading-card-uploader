@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
+@Suppress("FunctionNaming")
 fun CaptureScreen(
     statusText: String,
     onSignIn: () -> Unit,
