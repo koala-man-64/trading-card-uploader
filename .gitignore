@@ -6,9 +6,17 @@ Thumbs.db
 local.properties
 __pycache__/
 .venv/
+.venv*/
 venv/
 .env
 .env.*
+local.settings.json
+android-app/app/src/debug/res/raw/msal_auth_config.json
+.azurite/
+.coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 bin/
 obj/
 .azure/

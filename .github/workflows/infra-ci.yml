@@ -1,11 +1,82 @@
-﻿name: infra-ci
+name: infra-ci
+
 on:
   pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra-ci.yml"
   push:
-    branches: [ main ]
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra-ci.yml"
+  workflow_dispatch:
+    inputs:
+      deployDev:
+        description: "Deploy dev infrastructure after what-if"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - run: echo "TODO: add bicep lint/what-if/deploy (OIDC recommended)"
+      - uses: azure/cli@v2
+        with:
+          inlineScript: az bicep build --file infra/main.bicep
+
+  what-if-dev:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: What-if dev deployment
+        run: |
+          az deployment group what-if \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              env=dev \
+              entraTenantId="${{ vars.AZURE_TENANT_ID }}" \
+              apiClientId="${{ vars.API_CLIENT_ID }}" \
+              apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
+              allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]'
+
+  deploy-dev:
+    if: github.event_name == 'workflow_dispatch' && inputs.deployDev == 'true'
+    needs: what-if-dev
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy dev infrastructure
+        run: |
+          az deployment group create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              env=dev \
+              entraTenantId="${{ vars.AZURE_TENANT_ID }}" \
+              apiClientId="${{ vars.API_CLIENT_ID }}" \
+              apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
+              allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]'
