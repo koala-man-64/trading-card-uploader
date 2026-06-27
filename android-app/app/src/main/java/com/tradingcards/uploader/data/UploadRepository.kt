@@ -16,7 +16,11 @@ class UploadRepository(
     private val context: Context,
     private val dao: UploadQueueDao,
 ) {
-    suspend fun enqueue(localUri: String, contentLengthBytes: Long, contentType: String = "image/jpeg"): String {
+    suspend fun enqueue(
+        localUri: String,
+        contentLengthBytes: Long,
+        contentType: String = "image/jpeg",
+    ): String {
         val now = System.currentTimeMillis()
         val uploadId = UUID.randomUUID().toString()
         dao.insert(
@@ -33,14 +37,15 @@ class UploadRepository(
                 updatedAtEpochMillis = now,
             ),
         )
-        val request = OneTimeWorkRequestBuilder<UploadWorker>()
-            .setInputData(Data.Builder().putString(UploadWorker.KEY_UPLOAD_ID, uploadId).build())
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build(),
-            )
-            .build()
+        val request =
+            OneTimeWorkRequestBuilder<UploadWorker>()
+                .setInputData(Data.Builder().putString(UploadWorker.KEY_UPLOAD_ID, uploadId).build())
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build(),
+                )
+                .build()
         WorkManager.getInstance(context).enqueue(request)
         return uploadId
     }
@@ -55,7 +60,9 @@ class UploadRepository(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "trading-card-uploader.db",
-                ).build().also { database = it }
+                )
+                    .build()
+                    .also { database = it }
             }
     }
 }

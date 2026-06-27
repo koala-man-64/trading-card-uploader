@@ -14,13 +14,18 @@ class BlobUploader(
     private val context: Context,
     private val client: OkHttpClient = OkHttpClient.Builder().build(),
 ) {
-    suspend fun upload(uri: Uri, uploadUrl: String, requiredHeaders: Map<String, String>): Int =
+    suspend fun upload(
+        uri: Uri,
+        uploadUrl: String,
+        requiredHeaders: Map<String, String>,
+    ): Int =
         withContext(Dispatchers.IO) {
             val contentType = requiredHeaders["Content-Type"] ?: "image/jpeg"
             val body = ContentUriRequestBody(context, uri, contentType)
-            val builder = Request.Builder()
-                .url(uploadUrl)
-                .put(body)
+            val builder =
+                Request.Builder()
+                    .url(uploadUrl)
+                    .put(body)
             requiredHeaders.forEach { (name, value) -> builder.header(name, value) }
             client.newCall(builder.build()).execute().use { response -> response.code }
         }

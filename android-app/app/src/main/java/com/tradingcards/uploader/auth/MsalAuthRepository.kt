@@ -77,7 +77,10 @@ class MsalAuthRepository(private val context: Context) {
                         }
                     }
 
-                    override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) = Unit
+                    override fun onAccountChanged(
+                        priorAccount: IAccount?,
+                        currentAccount: IAccount?,
+                    ) = Unit
 
                     override fun onError(exception: MsalException) {
                         continuation.resumeWithException(exception)

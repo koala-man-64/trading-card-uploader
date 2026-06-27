@@ -11,8 +11,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
-@Suppress("FunctionNaming")
 fun CaptureScreen(
     statusText: String,
     onSignIn: () -> Unit,
@@ -25,7 +25,10 @@ fun CaptureScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Trading Card Uploader", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Trading Card Uploader",
+                style = MaterialTheme.typography.headlineSmall,
+            )
             Text(statusText)
             Button(onClick = onSignIn) {
                 Text("Sign in")

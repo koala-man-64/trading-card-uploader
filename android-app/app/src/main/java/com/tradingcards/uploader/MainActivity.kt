@@ -15,8 +15,8 @@ import androidx.core.content.FileProvider
 import com.tradingcards.uploader.auth.MsalAuthRepository
 import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.ui.CaptureScreen
-import java.io.File
 import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,21 +31,23 @@ class MainActivity : ComponentActivity() {
             var statusText by remember { mutableStateOf("Ready") }
             var pendingUri by remember { mutableStateOf<Uri?>(null) }
             var pendingFile by remember { mutableStateOf<File?>(null) }
-            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-                val uri = pendingUri
-                val file = pendingFile
-                if (saved && uri != null && file != null) {
-                    scope.launch {
-                        val uploadId = repository.enqueue(
-                            localUri = uri.toString(),
-                            contentLengthBytes = file.length(),
-                        )
-                        statusText = "Upload queued: $uploadId"
+            val launcher =
+                rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+                    val uri = pendingUri
+                    val file = pendingFile
+                    if (saved && uri != null && file != null) {
+                        scope.launch {
+                            val uploadId =
+                                repository.enqueue(
+                                    localUri = uri.toString(),
+                                    contentLengthBytes = file.length(),
+                                )
+                            statusText = "Upload queued: $uploadId"
+                        }
+                    } else {
+                        statusText = "Capture cancelled"
                     }
-                } else {
-                    statusText = "Capture cancelled"
                 }
-            }
 
             CaptureScreen(
                 statusText = statusText,

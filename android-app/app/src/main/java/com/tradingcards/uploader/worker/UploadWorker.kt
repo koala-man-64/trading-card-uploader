@@ -49,15 +49,17 @@ class UploadWorker(
                 System.currentTimeMillis(),
             )
             val token = MsalAuthRepository(applicationContext).acquireTokenSilent()
-            val sasResponse = SasIssuerClient.create(BuildConfig.API_BASE_URL).issueUploadSas(
-                authorization = "Bearer $token",
-                request = SasRequest(
-                    clientUploadId = uploadId,
-                    contentType = entity.contentType,
-                    contentLengthBytes = entity.contentLengthBytes,
-                    sha256Hex = entity.sha256Hex,
-                ),
-            )
+            val sasResponse =
+                SasIssuerClient.create(BuildConfig.API_BASE_URL).issueUploadSas(
+                    authorization = "Bearer $token",
+                    request =
+                        SasRequest(
+                            clientUploadId = uploadId,
+                            contentType = entity.contentType,
+                            contentLengthBytes = entity.contentLengthBytes,
+                            sha256Hex = entity.sha256Hex,
+                        ),
+                )
             val sas = sasResponse.body()
             if (!sasResponse.isSuccessful || sas == null) {
                 handleHttpFailure(
@@ -87,11 +89,12 @@ class UploadWorker(
         attempt: Int,
     ): Result {
         dao.updateStatus(uploadId, UploadStatus.Uploading, attempt, null, System.currentTimeMillis())
-        val uploadCode = BlobUploader(applicationContext).upload(
-            uri = Uri.parse(entity.localUri),
-            uploadUrl = sas.uploadUrl,
-            requiredHeaders = sas.requiredHeaders,
-        )
+        val uploadCode =
+            BlobUploader(applicationContext).upload(
+                uri = Uri.parse(entity.localUri),
+                uploadUrl = sas.uploadUrl,
+                requiredHeaders = sas.requiredHeaders,
+            )
         return if (uploadCode in SUCCESSFUL_UPLOAD_CODES) {
             dao.updateStatus(uploadId, UploadStatus.Uploaded, attempt, null, System.currentTimeMillis())
             dao.updateStatus(uploadId, UploadStatus.Complete, attempt, null, System.currentTimeMillis())
