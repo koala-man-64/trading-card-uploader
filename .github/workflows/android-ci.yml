@@ -12,6 +12,17 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Detect Android project
+        id: android
+        shell: bash
+        run: |
+          if [[ -x android-app/gradlew ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "android-app/gradlew not found; skipping Android build."
+          fi
       - name: Build
+        if: steps.android.outputs.present == 'true'
         working-directory: android-app
         run: ./gradlew build
