@@ -20,9 +20,10 @@ fun CaptureScreen(
 ) {
     MaterialTheme {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
