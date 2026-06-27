@@ -12,6 +12,7 @@ import com.tradingcards.uploader.data.SasIssuerClient
 import com.tradingcards.uploader.data.UploadQueueDao
 import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.model.SasRequest
+import com.tradingcards.uploader.model.SasResponse
 import com.tradingcards.uploader.model.UploadEntity
 import com.tradingcards.uploader.model.UploadStateMachine
 import com.tradingcards.uploader.model.UploadStatus
@@ -67,7 +68,7 @@ class UploadWorker(
                     message = "SAS request failed: ${sasResponse.code()}",
                 )
             } else {
-                uploadBlob(dao, uploadId, entity, sas.requiredHeaders, sas.uploadUrl, attempt)
+                uploadBlob(dao, uploadId, entity, sas, attempt)
             }
         } catch (exception: IOException) {
             handleNetworkFailure(dao, uploadId, attempt, exception.message)
@@ -82,15 +83,14 @@ class UploadWorker(
         dao: UploadQueueDao,
         uploadId: String,
         entity: UploadEntity,
-        requiredHeaders: Map<String, String>,
-        uploadUrl: String,
+        sas: SasResponse,
         attempt: Int,
     ): Result {
         dao.updateStatus(uploadId, UploadStatus.Uploading, attempt, null, System.currentTimeMillis())
         val uploadCode = BlobUploader(applicationContext).upload(
             uri = Uri.parse(entity.localUri),
-            uploadUrl = uploadUrl,
-            requiredHeaders = requiredHeaders,
+            uploadUrl = sas.uploadUrl,
+            requiredHeaders = sas.requiredHeaders,
         )
         return if (uploadCode in SUCCESSFUL_UPLOAD_CODES) {
             dao.updateStatus(uploadId, UploadStatus.Uploaded, attempt, null, System.currentTimeMillis())
