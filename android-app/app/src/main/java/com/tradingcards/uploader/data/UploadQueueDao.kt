@@ -10,6 +10,7 @@ import androidx.room.TypeConverters
 import com.tradingcards.uploader.model.UploadEntity
 import com.tradingcards.uploader.model.UploadStatus
 import com.tradingcards.uploader.model.UploadStatusConverter
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface UploadQueueDao {
@@ -21,6 +22,9 @@ interface UploadQueueDao {
 
     @Query("SELECT * FROM upload_queue ORDER BY createdAtEpochMillis DESC LIMIT 20")
     suspend fun recent(): List<UploadEntity>
+
+    @Query("SELECT * FROM upload_queue ORDER BY createdAtEpochMillis DESC LIMIT 1")
+    fun latest(): Flow<UploadEntity?>
 
     @Query(
         """
@@ -39,9 +43,25 @@ interface UploadQueueDao {
         lastError: String?,
         updatedAtEpochMillis: Long,
     )
+
+    @Query(
+        """
+        UPDATE upload_queue
+        SET serverUploadId = :serverUploadId,
+            blobName = :blobName,
+            updatedAtEpochMillis = :updatedAtEpochMillis
+        WHERE uploadId = :uploadId
+        """,
+    )
+    suspend fun updateServerUpload(
+        uploadId: String,
+        serverUploadId: String,
+        blobName: String,
+        updatedAtEpochMillis: Long,
+    )
 }
 
-@Database(entities = [UploadEntity::class], version = 1, exportSchema = false)
+@Database(entities = [UploadEntity::class], version = 2, exportSchema = false)
 @TypeConverters(UploadStatusConverter::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun uploadQueueDao(): UploadQueueDao

@@ -21,6 +21,7 @@ param allowedContentTypes array = [
 param entraTenantId string
 param apiClientId string
 param apiAppIdUri string = 'api://${apiClientId}'
+param allowedAndroidClientIds array = []
 param allowedAudiences array = [
   apiAppIdUri
   apiClientId
@@ -225,6 +226,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           value: join(allowedAudiences, ',')
         }
         {
+          name: 'ALLOWED_ANDROID_CLIENT_IDS'
+          value: join(allowedAndroidClientIds, ',')
+        }
+        {
           name: 'REQUIRED_SCOPE'
           value: 'upload.write'
         }
@@ -275,6 +280,9 @@ resource authSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     globalValidation: {
       requireAuthentication: true
       unauthenticatedClientAction: 'Return401'
+      excludedPaths: [
+        '/api/healthz'
+      ]
     }
     identityProviders: {
       azureActiveDirectory: {

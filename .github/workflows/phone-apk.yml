@@ -1,0 +1,104 @@
+name: phone-apk
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-dev-apk:
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Create dev signing key and MSAL config
+        shell: bash
+        env:
+          ANDROID_CLIENT_ID: ${{ vars.ANDROID_CLIENT_ID }}
+          ANDROID_TENANT_ID: ${{ vars.ANDROID_TENANT_ID }}
+          ANDROID_MSAL_SIGNATURE_HASH: ${{ vars.ANDROID_MSAL_SIGNATURE_HASH }}
+          ANDROID_DEV_KEYSTORE_B64: ${{ secrets.ANDROID_DEV_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_CLIENT_ID ANDROID_TENANT_ID ANDROID_MSAL_SIGNATURE_HASH ANDROID_DEV_KEYSTORE_B64; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is required in the dev GitHub environment"
+              exit 1
+            fi
+          done
+
+          umask 077
+          mkdir -p android-app/app/build/phone-signing
+          printf '%s' "$ANDROID_DEV_KEYSTORE_B64" \
+            | base64 --decode \
+            > android-app/app/build/phone-signing/dev-upload.jks
+
+          mkdir -p android-app/app/src/debug/res/raw
+          cat > android-app/app/src/debug/res/raw/msal_auth_config.json <<EOF
+          {
+            "client_id": "$ANDROID_CLIENT_ID",
+            "authorization_user_agent": "DEFAULT",
+            "redirect_uri": "msauth://com.tradingcards.uploader/$ANDROID_MSAL_SIGNATURE_HASH",
+            "account_mode": "SINGLE",
+            "authorities": [
+              {
+                "type": "AAD",
+                "audience": {
+                  "type": "AzureADMyOrg",
+                  "tenant_id": "$ANDROID_TENANT_ID"
+                }
+              }
+            ]
+          }
+          EOF
+
+      - name: Build signed dev phone APK
+        env:
+          ORG_GRADLE_PROJECT_apiBaseUrl: ${{ vars.ANDROID_API_BASE_URL }}
+          ORG_GRADLE_PROJECT_apiScope: ${{ vars.ANDROID_API_SCOPE }}
+          ORG_GRADLE_PROJECT_msalRedirectPath: ${{ vars.ANDROID_MSAL_SIGNATURE_HASH }}
+          ORG_GRADLE_PROJECT_msalClientId: ${{ vars.ANDROID_CLIENT_ID }}
+          ORG_GRADLE_PROJECT_msalTenantId: ${{ vars.ANDROID_TENANT_ID }}
+          ORG_GRADLE_PROJECT_devSigningStoreFile: ${{ github.workspace }}/android-app/app/build/phone-signing/dev-upload.jks
+          ORG_GRADLE_PROJECT_devSigningStorePassword: ${{ secrets.ANDROID_DEV_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_devSigningKeyAlias: ${{ secrets.ANDROID_DEV_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_devSigningKeyPassword: ${{ secrets.ANDROID_DEV_KEY_PASSWORD }}
+        run: gradle -p android-app validatePhoneBuildConfig assembleDebug
+
+      - name: Write build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_path="android-app/app/build/outputs/apk/debug/app-debug.apk"
+          metadata_path="android-app/app/build/outputs/apk/debug/phone-build-metadata.json"
+          apk_sha256="$(sha256sum "$apk_path" | cut -d ' ' -f 1)"
+          cat > "$metadata_path" <<EOF
+          {
+            "artifact": "app-debug.apk",
+            "apkSha256": "$apk_sha256",
+            "gitSha": "$GITHUB_SHA",
+            "packageName": "com.tradingcards.uploader",
+            "versionName": "0.1.0",
+            "workflowRunId": "$GITHUB_RUN_ID"
+          }
+          EOF
+
+      - name: Upload phone APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-dev-apk
+          retention-days: 7
+          path: |
+            android-app/app/build/outputs/apk/debug/app-debug.apk
+            android-app/app/build/outputs/apk/debug/phone-build-metadata.json

@@ -70,6 +70,12 @@ class UploadWorker(
                     message = "SAS request failed: ${sasResponse.code()}",
                 )
             } else {
+                dao.updateServerUpload(
+                    uploadId = uploadId,
+                    serverUploadId = sas.uploadId,
+                    blobName = sas.blobName,
+                    updatedAtEpochMillis = System.currentTimeMillis(),
+                )
                 uploadBlob(dao, uploadId, entity, sas, attempt)
             }
         } catch (exception: IOException) {

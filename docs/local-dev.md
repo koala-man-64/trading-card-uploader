@@ -52,6 +52,8 @@ gradle `
 
 ## Dev Smoke
 
+For a physical phone build and install path, use `docs/phone-ready.md`.
+
 1. Deploy infra to a dev resource group.
 2. Deploy the Function App.
 3. Install the debug Android build.

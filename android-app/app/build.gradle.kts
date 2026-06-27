@@ -1,3 +1,5 @@
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,6 +8,11 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint")
     id("io.gitlab.arturbosch.detekt")
 }
+
+val devSigningStoreFile = providers.gradleProperty("devSigningStoreFile")
+val devSigningStorePassword = providers.gradleProperty("devSigningStorePassword")
+val devSigningKeyAlias = providers.gradleProperty("devSigningKeyAlias")
+val devSigningKeyPassword = providers.gradleProperty("devSigningKeyPassword")
 
 android {
     namespace = "com.tradingcards.uploader"
@@ -26,6 +33,25 @@ android {
         buildConfigField("String", "API_SCOPE", "\"${apiScope.get()}\"")
         val msalRedirectPath = providers.gradleProperty("msalRedirectPath").orElse("PLACEHOLDER_SIGNATURE_HASH")
         manifestPlaceholders["msalRedirectPath"] = msalRedirectPath.get()
+    }
+
+    signingConfigs {
+        if (devSigningStoreFile.isPresent) {
+            create("devPhone") {
+                storeFile = file(devSigningStoreFile.get())
+                storePassword = devSigningStorePassword.get()
+                keyAlias = devSigningKeyAlias.get()
+                keyPassword = devSigningKeyPassword.get()
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (devSigningStoreFile.isPresent) {
+                signingConfig = signingConfigs.getByName("devPhone")
+            }
+        }
     }
 
     buildFeatures {
@@ -73,4 +99,59 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+tasks.register("validatePhoneBuildConfig") {
+    group = "verification"
+    description = "Fails phone APK builds when required dev runtime or signing values are missing."
+
+    doLast {
+        val requiredProperties =
+            listOf(
+                "apiBaseUrl",
+                "apiScope",
+                "msalRedirectPath",
+                "msalClientId",
+                "msalTenantId",
+                "devSigningStoreFile",
+                "devSigningStorePassword",
+                "devSigningKeyAlias",
+                "devSigningKeyPassword",
+            )
+        val values =
+            requiredProperties.associateWith {
+                providers.gradleProperty(it).orNull?.trim().orEmpty()
+            }
+        val missing = values.filterValues { it.isBlank() }.keys
+        if (missing.isNotEmpty()) {
+            throw GradleException("Missing phone build properties: ${missing.joinToString(", ")}")
+        }
+
+        val placeholders =
+            values
+                .filterValues {
+                    it.contains("replace-with", ignoreCase = true) ||
+                        it.contains("placeholder", ignoreCase = true) ||
+                        it == "00000000-0000-0000-0000-000000000000"
+                }.keys
+        if (placeholders.isNotEmpty()) {
+            throw GradleException(
+                "Phone build properties still contain placeholders: ${placeholders.joinToString(", ")}",
+            )
+        }
+
+        val apiBaseUrl = values.getValue("apiBaseUrl")
+        if (!apiBaseUrl.startsWith("https://")) {
+            throw GradleException("apiBaseUrl must be an HTTPS dev Function URL for phone builds")
+        }
+        if (!apiBaseUrl.endsWith("/api/")) {
+            throw GradleException("apiBaseUrl must end with /api/")
+        }
+        if (!values.getValue("apiScope").endsWith("/upload.write")) {
+            throw GradleException("apiScope must end with /upload.write")
+        }
+        if (!file(values.getValue("devSigningStoreFile")).isFile) {
+            throw GradleException("devSigningStoreFile does not exist")
+        }
+    }
 }

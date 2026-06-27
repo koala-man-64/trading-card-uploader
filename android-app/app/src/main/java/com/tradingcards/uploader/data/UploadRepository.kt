@@ -2,6 +2,8 @@ package com.tradingcards.uploader.data
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.NetworkType
@@ -30,6 +32,8 @@ class UploadRepository(
                 contentType = contentType,
                 contentLengthBytes = contentLengthBytes,
                 sha256Hex = null,
+                serverUploadId = null,
+                blobName = null,
                 status = UploadStatus.Queued,
                 attemptCount = 0,
                 lastError = null,
@@ -61,8 +65,17 @@ class UploadRepository(
                     AppDatabase::class.java,
                     "trading-card-uploader.db",
                 )
+                    .addMigrations(MIGRATION_1_2)
                     .build()
                     .also { database = it }
+            }
+
+        private val MIGRATION_1_2 =
+            object : Migration(1, 2) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE upload_queue ADD COLUMN serverUploadId TEXT")
+                    db.execSQL("ALTER TABLE upload_queue ADD COLUMN blobName TEXT")
+                }
             }
     }
 }

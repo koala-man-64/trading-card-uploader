@@ -22,6 +22,8 @@ data class UploadEntity(
     val contentType: String,
     val contentLengthBytes: Long,
     val sha256Hex: String?,
+    val serverUploadId: String?,
+    val blobName: String?,
     val status: UploadStatus,
     val attemptCount: Int,
     val lastError: String?,
