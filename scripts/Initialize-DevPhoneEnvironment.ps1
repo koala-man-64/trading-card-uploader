@@ -175,7 +175,13 @@ function Ensure-ServicePrincipal {
 
 function New-ProtectedText {
     $bytes = [byte[]]::new(32)
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
     return [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+", "A").Replace("/", "B")
 }
 
@@ -491,7 +497,7 @@ $variables = [ordered]@{
     ANDROID_TENANT_ID = $TenantId
     ANDROID_API_SCOPE = "$ApiAppIdUri/upload.write"
     ANDROID_MSAL_SIGNATURE_HASH = $signatureHash
-    GITHUB_SMOKE_PRINCIPAL_ID = $githubSp.id
+    SMOKE_PRINCIPAL_ID = $githubSp.id
 }
 foreach ($entry in $variables.GetEnumerator()) {
     Update-GitHubEnvironmentVariable -Name $entry.Key -Value $entry.Value

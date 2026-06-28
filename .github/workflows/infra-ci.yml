@@ -56,7 +56,7 @@ jobs:
               apiClientId="${{ vars.API_CLIENT_ID }}" \
               apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
               allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]' \
-              githubSmokePrincipalId="${{ vars.GITHUB_SMOKE_PRINCIPAL_ID }}"
+              githubSmokePrincipalId="${{ vars.SMOKE_PRINCIPAL_ID }}"
 
   deploy-dev:
     if: github.event_name == 'workflow_dispatch' && inputs.deployDev == 'true'
@@ -83,7 +83,7 @@ jobs:
               apiClientId="${{ vars.API_CLIENT_ID }}" \
               apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
               allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]' \
-              githubSmokePrincipalId="${{ vars.GITHUB_SMOKE_PRINCIPAL_ID }}" \
+              githubSmokePrincipalId="${{ vars.SMOKE_PRINCIPAL_ID }}" \
             > dev-deployment.json
       - name: Export dev deployment outputs
         run: |
