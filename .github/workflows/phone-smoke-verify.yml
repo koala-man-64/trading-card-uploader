@@ -1,0 +1,158 @@
+name: phone-smoke-verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      clientUploadId:
+        description: "Client upload ID displayed in the app"
+        required: true
+      serverUploadId:
+        description: "Server upload ID displayed in the app"
+        required: true
+      blobName:
+        description: "Blob name displayed in the app"
+        required: true
+      startedAfterUtc:
+        description: "Optional UTC lower bound, for example 2026-06-27T18:00:00Z"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-dev-upload:
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 15
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      APP_INSIGHTS_NAME: ${{ vars.APP_INSIGHTS_NAME }}
+      UPLOAD_STORAGE_ACCOUNT_NAME: ${{ vars.UPLOAD_STORAGE_ACCOUNT_NAME }}
+      UPLOAD_CONTAINER_NAME: ${{ vars.UPLOAD_CONTAINER_NAME }}
+      CLIENT_UPLOAD_ID: ${{ inputs.clientUploadId }}
+      SERVER_UPLOAD_ID: ${{ inputs.serverUploadId }}
+      BLOB_NAME: ${{ inputs.blobName }}
+      STARTED_AFTER_UTC: ${{ inputs.startedAfterUtc }}
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate smoke inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AZURE_RESOURCE_GROUP APP_INSIGHTS_NAME UPLOAD_STORAGE_ACCOUNT_NAME UPLOAD_CONTAINER_NAME CLIENT_UPLOAD_ID SERVER_UPLOAD_ID BLOB_NAME; do
+            if [ -z "${!name:-}" ]; then
+              printf '%s\n' "::error::$name is required"
+              exit 1
+            fi
+          done
+          uuid_regex='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+          if [[ ! "$CLIENT_UPLOAD_ID" =~ $uuid_regex ]]; then
+            printf '%s\n' "::error::clientUploadId must be a UUID"
+            exit 1
+          fi
+          if [[ ! "$SERVER_UPLOAD_ID" =~ $uuid_regex ]]; then
+            printf '%s\n' "::error::serverUploadId must be a UUID"
+            exit 1
+          fi
+          if [[ ! "$BLOB_NAME" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            printf '%s\n' "::error::blobName contains unsupported characters"
+            exit 1
+          fi
+          if [ -n "$STARTED_AFTER_UTC" ] && [[ ! "$STARTED_AFTER_UTC" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+            printf '%s\n' "::error::startedAfterUtc must be UTC like 2026-06-27T18:00:00Z"
+            exit 1
+          fi
+
+      - name: Verify blob exists through RBAC
+        shell: bash
+        run: |
+          set -euo pipefail
+          exists="$(
+            az storage blob exists \
+              --auth-mode login \
+              --account-name "$UPLOAD_STORAGE_ACCOUNT_NAME" \
+              --container-name "$UPLOAD_CONTAINER_NAME" \
+              --name "$BLOB_NAME" \
+              --query exists \
+              --output tsv
+          )"
+          if [ "$exists" != "true" ]; then
+            printf '%s\n' "::error::Blob was not found through RBAC"
+            exit 1
+          fi
+
+      - name: Verify App Insights telemetry
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$STARTED_AFTER_UTC" ]; then
+            start_expr="datetime($STARTED_AFTER_UTC)"
+          else
+            start_expr="ago(24h)"
+          fi
+
+          cat > upload-telemetry.kql <<KQL
+          let startTime = $start_expr;
+          let serverUploadId = '$SERVER_UPLOAD_ID';
+          let blobName = '$BLOB_NAME';
+          union isfuzzy=true requests, traces
+          | where timestamp >= startTime
+          | extend payload = strcat(tostring(name), " ", tostring(message), " ", tostring(url), " ", tostring(customDimensions))
+          | where payload contains serverUploadId or payload contains blobName
+          | summarize matches = count()
+          KQL
+
+          matches="$(
+            az monitor app-insights query \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --app "$APP_INSIGHTS_NAME" \
+              --analytics-query "$(cat upload-telemetry.kql)" \
+              --query 'tables[0].rows[0][0]' \
+              --output tsv
+          )"
+          if [ "${matches:-0}" -lt 1 ]; then
+            printf '%s\n' "::error::No App Insights request or trace telemetry matched the upload evidence"
+            exit 1
+          fi
+
+          cat > telemetry-leak-check.kql <<KQL
+          let startTime = $start_expr;
+          union isfuzzy=true requests, traces, dependencies, exceptions
+          | where timestamp >= startTime
+          | extend payload = strcat(tostring(name), " ", tostring(message), " ", tostring(url), " ", tostring(target), " ", tostring(data), " ", tostring(customDimensions), " ", tostring(details))
+          | where payload contains "Bearer " or payload contains "sig=" or payload contains "SharedAccessSignature"
+          | summarize matches = count()
+          KQL
+
+          leak_matches="$(
+            az monitor app-insights query \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --app "$APP_INSIGHTS_NAME" \
+              --analytics-query "$(cat telemetry-leak-check.kql)" \
+              --query 'tables[0].rows[0][0]' \
+              --output tsv
+          )"
+          if [ "${leak_matches:-0}" -ne 0 ]; then
+            printf '%s\n' "::error::Telemetry contains bearer or SAS markers"
+            exit 1
+          fi
+
+      - name: Write verification summary
+        shell: bash
+        run: |
+          {
+            printf '%s\n' "## Phone smoke verification"
+            printf '%s\n' "- Client upload ID: \`$CLIENT_UPLOAD_ID\`"
+            printf '%s\n' "- Server upload ID: \`$SERVER_UPLOAD_ID\`"
+            printf '%s\n' "- Blob: \`$BLOB_NAME\`"
+            printf '%s\n' "- Blob exists through RBAC: yes"
+            printf '%s\n' "- App Insights telemetry matched: yes"
+            printf '%s\n' "- Telemetry bearer/SAS marker check: clean"
+          } >> "$GITHUB_STEP_SUMMARY"

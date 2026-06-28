@@ -29,9 +29,11 @@ jobs:
           ANDROID_TENANT_ID: ${{ vars.ANDROID_TENANT_ID }}
           ANDROID_MSAL_SIGNATURE_HASH: ${{ vars.ANDROID_MSAL_SIGNATURE_HASH }}
           ANDROID_DEV_KEYSTORE_B64: ${{ secrets.ANDROID_DEV_KEYSTORE_B64 }}
+          ANDROID_DEV_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_DEV_KEYSTORE_PASSWORD }}
+          ANDROID_DEV_KEY_ALIAS: ${{ secrets.ANDROID_DEV_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          for name in ANDROID_CLIENT_ID ANDROID_TENANT_ID ANDROID_MSAL_SIGNATURE_HASH ANDROID_DEV_KEYSTORE_B64; do
+          for name in ANDROID_CLIENT_ID ANDROID_TENANT_ID ANDROID_MSAL_SIGNATURE_HASH ANDROID_DEV_KEYSTORE_B64 ANDROID_DEV_KEYSTORE_PASSWORD ANDROID_DEV_KEY_ALIAS; do
             if [ -z "${!name:-}" ]; then
               echo "::error::$name is required in the dev GitHub environment"
               exit 1
@@ -44,12 +46,26 @@ jobs:
             | base64 --decode \
             > android-app/app/build/phone-signing/dev-upload.jks
 
+          actual_hash="$(
+            keytool -exportcert \
+              -keystore android-app/app/build/phone-signing/dev-upload.jks \
+              -alias "$ANDROID_DEV_KEY_ALIAS" \
+              -storepass "$ANDROID_DEV_KEYSTORE_PASSWORD" \
+              -rfc |
+            python3 -c 'import base64, hashlib, sys; lines=[line.strip() for line in sys.stdin if "CERTIFICATE" not in line]; cert=base64.b64decode("".join(lines)); print(base64.b64encode(hashlib.sha1(cert).digest()).decode())'
+          )"
+          if [ "$actual_hash" != "$ANDROID_MSAL_SIGNATURE_HASH" ]; then
+            printf '%s\n' "::error::ANDROID_MSAL_SIGNATURE_HASH does not match the dev signing keystore"
+            exit 1
+          fi
+          encoded_hash="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$ANDROID_MSAL_SIGNATURE_HASH")"
+
           mkdir -p android-app/app/src/debug/res/raw
           cat > android-app/app/src/debug/res/raw/msal_auth_config.json <<EOF
           {
             "client_id": "$ANDROID_CLIENT_ID",
             "authorization_user_agent": "DEFAULT",
-            "redirect_uri": "msauth://com.tradingcards.uploader/$ANDROID_MSAL_SIGNATURE_HASH",
+            "redirect_uri": "msauth://com.tradingcards.uploader/$encoded_hash",
             "account_mode": "SINGLE",
             "authorities": [
               {

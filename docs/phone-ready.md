@@ -11,6 +11,17 @@ Configure Entra before building the phone APK:
 - Android redirect URI is `msauth://com.tradingcards.uploader/<dev-signature-hash>`.
 - GitHub Azure OIDC app has a federated credential for the `dev` environment.
 
+The repo-provided setup script can create or update those dev registrations, generate or reuse a stable ignored dev signing keystore, compute the MSAL signature hash, create the GitHub `dev` environment, and write the known GitHub environment values:
+
+```powershell
+.\scripts\Initialize-DevPhoneEnvironment.ps1 `
+  -ResourceGroup <dev-resource-group> `
+  -GrantAdminConsent `
+  -AssignAzureRoles
+```
+
+The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere.
+
 Configure the GitHub `dev` environment:
 
 Variables:
@@ -27,6 +38,10 @@ Variables:
 - `ANDROID_API_SCOPE`
 - `ANDROID_MSAL_SIGNATURE_HASH`
 - `FUNCTION_APP_NAME`
+- `GITHUB_SMOKE_PRINCIPAL_ID`
+- `UPLOAD_STORAGE_ACCOUNT_NAME`
+- `UPLOAD_CONTAINER_NAME`
+- `APP_INSIGHTS_NAME`
 
 Secrets:
 
@@ -35,20 +50,23 @@ Secrets:
 - `ANDROID_DEV_KEY_ALIAS`
 - `ANDROID_DEV_KEY_PASSWORD`
 
-`ANDROID_DEV_KEYSTORE_B64` is the base64-encoded dev signing keystore. Keep it stable so the Entra Android redirect signature hash stays stable.
+`Initialize-DevPhoneEnvironment.ps1` sets the app-registration and signing values. `Sync-DevInfraOutputs.ps1` sets or refreshes the deploy-derived values after infrastructure deployment.
 
 ## Build And Deploy
 
 1. Merge the phone-ready PR only after source checks pass and review is complete.
 2. Run `infra-ci` with `deployDev=false` and review the dev what-if.
 3. Run `infra-ci` with `deployDev=true` to deploy dev infrastructure.
-4. Set or refresh `ANDROID_API_BASE_URL` from the `androidApiBaseUrl` Bicep output.
-5. Set or refresh `ANDROID_API_SCOPE` from the `androidApiScope` Bicep output.
-6. Set or refresh `FUNCTION_APP_NAME` from the `functionAppName` Bicep output.
-7. Run `function-ci` with `deployDev=true`.
-8. Run `phone-apk` and download the `phone-dev-apk` artifact.
+4. Sync the dev deployment outputs back to the GitHub `dev` environment:
 
-The `phone-apk` workflow creates the ignored debug MSAL config at build time, signs with the dev keystore secret, validates that no runtime value is a placeholder, and uploads `app-debug.apk` plus non-secret build metadata.
+   ```powershell
+   .\scripts\Sync-DevInfraOutputs.ps1 -ResourceGroup <dev-resource-group>
+   ```
+
+5. Run `function-ci` with `deployDev=true`.
+6. Run `phone-apk` and download the `phone-dev-apk` artifact.
+
+The `phone-apk` workflow creates the ignored debug MSAL config at build time, signs with the dev keystore secret, verifies `ANDROID_MSAL_SIGNATURE_HASH` against the dev keystore, URL-encodes the hash only in the MSAL JSON redirect URI, validates that no runtime value is a placeholder, and uploads `app-debug.apk` plus non-secret build metadata.
 
 ## Install
 
@@ -71,10 +89,10 @@ adb install -r .\app-debug.apk
 3. Tap `Capture card photo` and take one test photo.
 4. Wait for the latest upload panel to show `Status: Complete`.
 5. Record the displayed client upload ID, server upload ID, and blob name.
-6. Verify the displayed blob exists in the private dev container through RBAC.
-7. Confirm App Insights has request/trace telemetry for the same upload ID.
-8. Confirm telemetry does not contain bearer tokens, SAS URLs, or `sig=` values.
-9. Confirm a write-only SAS cannot read, list, or delete blobs.
+6. Run `phone-smoke-verify` with the client upload ID, server upload ID, blob name, and optional UTC lower bound.
+7. Confirm the workflow summary says the blob exists through RBAC, App Insights telemetry matched, and telemetry bearer/SAS marker checks are clean.
+
+Write-only SAS behavior is proven by the Function unit tests so the app and smoke workflow do not need to expose SAS URLs.
 
 ## Troubleshooting
 
@@ -82,3 +100,5 @@ adb install -r .\app-debug.apk
 - If SAS issuance returns 401 or 403, verify `ANDROID_API_SCOPE`, API app consent, and `ALLOWED_ANDROID_CLIENT_IDS`.
 - If the app stays in retry or failed state, inspect the displayed last error and correlate with Function/App Insights traces by upload ID.
 - If `phone-apk` fails validation, replace the placeholder or missing GitHub environment value named in the workflow log.
+- If `phone-apk` reports a signing hash mismatch, rerun `Initialize-DevPhoneEnvironment.ps1` with the same `.local/phone-dev/` keystore or update the Entra Android redirect URI to the current hash.
+- If `phone-smoke-verify` cannot query blob or telemetry evidence, verify `GITHUB_SMOKE_PRINCIPAL_ID` was passed to `infra-ci` and that the dev deployment has completed with smoke-reader RBAC assignments.

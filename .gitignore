@@ -10,6 +10,7 @@ __pycache__/
 venv/
 .env
 .env.*
+.local/
 local.settings.json
 android-app/app/src/debug/res/raw/msal_auth_config.json
 .azurite/

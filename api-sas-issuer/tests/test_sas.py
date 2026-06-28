@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import base64
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from shared.config import Settings
 from shared.models import Claims, Problem, UploadSasRequest
-from shared.sas import MemoryIdempotencyStore, SasIssuer, StaticSasSigner, build_blob_name
+from shared.sas import (
+    ConnectionStringSasSigner,
+    MemoryIdempotencyStore,
+    SasIssuer,
+    StaticSasSigner,
+    build_blob_name,
+)
 
 
 def settings() -> Settings:
@@ -81,3 +89,42 @@ def test_issuer_rejects_idempotency_conflict() -> None:
         issuer.issue(request(size=8), claims(), datetime(2026, 6, 27, tzinfo=UTC))
 
     assert exc.value.status_code == 409
+
+
+def test_generated_sas_grants_create_write_only() -> None:
+    account_key = base64.b64encode(b"0" * 64).decode()
+    local_settings = Settings(
+        environment="test",
+        entra_tenant_id="tenant",
+        api_client_id="api-client",
+        api_app_id_uri="api://api-client",
+        allowed_audiences=("api://api-client", "api-client"),
+        required_scope="upload.write",
+        allowed_android_client_ids=(),
+        upload_storage_account_url="https://upload.blob.core.windows.net",
+        upload_container_name="card-uploads",
+        max_upload_bytes=10,
+        sas_ttl_minutes=5,
+        allowed_content_types=("image/jpeg", "image/heic"),
+        hash_salt="salt",
+        sas_signer_mode="connection_string",
+        storage_connection_string=(
+            "DefaultEndpointsProtocol=https;"
+            "AccountName=upload;"
+            f"AccountKey={account_key};"
+            "EndpointSuffix=core.windows.net"
+        ),
+        managed_identity_client_id=None,
+    )
+
+    url = ConnectionStringSasSigner(local_settings).sign(
+        "raw/tenant/user/20260627/upload.jpg",
+        datetime(2026, 6, 27, 18, 30, tzinfo=UTC),
+    )
+
+    permissions = parse_qs(urlparse(url).query)["sp"][0]
+    assert "c" in permissions
+    assert "w" in permissions
+    assert "r" not in permissions
+    assert "l" not in permissions
+    assert "d" not in permissions

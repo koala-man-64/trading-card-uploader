@@ -52,6 +52,10 @@ var storageBlobDataReaderRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
 )
+var monitoringReaderRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
+)
 
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: identityName
@@ -334,6 +338,26 @@ resource smokeReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (
   scope: uploadContainer
   properties: {
     roleDefinitionId: storageBlobDataReaderRoleId
+    principalId: githubSmokePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource smokeAppInsightsReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubSmokePrincipalId) && env != 'prod') {
+  name: guid(appInsights.id, githubSmokePrincipalId, 'smoke-appinsights-reader')
+  scope: appInsights
+  properties: {
+    roleDefinitionId: monitoringReaderRoleId
+    principalId: githubSmokePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource smokeWorkspaceReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubSmokePrincipalId) && env != 'prod') {
+  name: guid(workspace.id, githubSmokePrincipalId, 'smoke-workspace-reader')
+  scope: workspace
+  properties: {
+    roleDefinitionId: monitoringReaderRoleId
     principalId: githubSmokePrincipalId
     principalType: 'ServicePrincipal'
   }
