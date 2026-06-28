@@ -82,7 +82,8 @@ jobs:
       - name: Build signed dev phone APK
         env:
           ORG_GRADLE_PROJECT_apiBaseUrl: ${{ vars.ANDROID_API_BASE_URL }}
-          ORG_GRADLE_PROJECT_apiScope: ${{ vars.ANDROID_API_SCOPE }}
+          ORG_GRADLE_PROJECT_uploadApiScope: ${{ vars.ANDROID_API_SCOPE }}
+          ORG_GRADLE_PROJECT_galleryManageScope: ${{ vars.ANDROID_GALLERY_MANAGE_SCOPE }}
           ORG_GRADLE_PROJECT_msalRedirectPath: ${{ vars.ANDROID_MSAL_SIGNATURE_HASH }}
           ORG_GRADLE_PROJECT_msalClientId: ${{ vars.ANDROID_CLIENT_ID }}
           ORG_GRADLE_PROJECT_msalTenantId: ${{ vars.ANDROID_TENANT_ID }}

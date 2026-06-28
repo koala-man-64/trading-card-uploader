@@ -122,6 +122,9 @@ class StaticSasSigner:
     def sign(self, blob_name: str, expires_at: datetime) -> str:
         return self._url.replace("{blobName}", blob_name)
 
+    def sign_read(self, blob_name: str, expires_at: datetime) -> str:
+        return self.sign(blob_name, expires_at)
+
 
 class UserDelegationSasSigner:
     def __init__(self, service_client: BlobServiceClient, settings: Settings) -> None:
@@ -144,6 +147,21 @@ class UserDelegationSasSigner:
             protocol="https",
         )
         return _blob_sas_url(self._service.url, self._settings.upload_container_name, blob_name, sas)
+
+    def sign_read(self, blob_name: str, expires_at: datetime) -> str:
+        starts_on = datetime.now(UTC) - timedelta(minutes=5)
+        delegation_key = self._service.get_user_delegation_key(starts_on, expires_at)
+        sas = generate_blob_sas(
+            account_name=self._account_name,
+            container_name=self._settings.upload_container_name,
+            blob_name=blob_name,
+            user_delegation_key=delegation_key,
+            permission=BlobSasPermissions(read=True),
+            start=starts_on,
+            expiry=expires_at,
+            protocol="https",
+        )
+        return f"{self._service.url}/{self._settings.upload_container_name}/{blob_name}?{sas}"
 
 
 class ConnectionStringSasSigner:
@@ -178,6 +196,22 @@ class ConnectionStringSasSigner:
             protocol="https" if self._endpoint.startswith("https://") else None,
         )
         return _blob_sas_url(self._endpoint, self._settings.upload_container_name, blob_name, sas)
+
+    def sign_read(self, blob_name: str, expires_at: datetime) -> str:
+        if not self._account_key:
+            raise Problem(500, "local_sas_unavailable", "Connection string account key is missing")
+        starts_on = datetime.now(UTC) - timedelta(minutes=5)
+        sas = generate_blob_sas(
+            account_name=self._account_name,
+            container_name=self._settings.upload_container_name,
+            blob_name=blob_name,
+            account_key=self._account_key,
+            permission=BlobSasPermissions(read=True),
+            start=starts_on,
+            expiry=expires_at,
+            protocol="https" if self._endpoint.startswith("https://") else None,
+        )
+        return f"{self._endpoint.rstrip('/')}/{self._settings.upload_container_name}/{blob_name}?{sas}"
 
 
 class SasIssuer:

@@ -26,6 +26,12 @@ param allowedAudiences array = [
   apiAppIdUri
   apiClientId
 ]
+param galleryManageScope string = 'gallery.manage'
+param adminAllowedObjectIds array = []
+param adminAllowedRoles array = [
+  'Gallery.Admin'
+]
+param scannerAdminBaseUrl string = ''
 param logRetentionDays int = 30
 param appInsightsDailyCapGb int = 1
 param githubSmokePrincipalId string = ''
@@ -242,6 +248,22 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           value: 'upload.write'
         }
         {
+          name: 'GALLERY_MANAGE_SCOPE'
+          value: galleryManageScope
+        }
+        {
+          name: 'ADMIN_ALLOWED_OBJECT_IDS'
+          value: join(adminAllowedObjectIds, ',')
+        }
+        {
+          name: 'ADMIN_ALLOWED_ROLES'
+          value: join(adminAllowedRoles, ',')
+        }
+        {
+          name: 'SCANNER_ADMIN_BASE_URL'
+          value: scannerAdminBaseUrl
+        }
+        {
           name: 'UPLOAD_STORAGE_ACCOUNT_URL'
           value: uploadStorage.properties.primaryEndpoints.blob
         }
@@ -400,3 +422,4 @@ output logAnalyticsWorkspaceId string = workspace.id
 output androidApiBaseUrl string = 'https://${functionApp.properties.defaultHostName}/api/'
 output androidAuthority string = 'https://login.microsoftonline.com/${entraTenantId}'
 output androidApiScope string = '${apiAppIdUri}/upload.write'
+output androidGalleryManageScope string = '${apiAppIdUri}/${galleryManageScope}'

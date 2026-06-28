@@ -30,7 +30,8 @@ The MSAL redirect URI must match both files below:
 ```powershell
 Set-Location android-app
 gradle `
-  -PapiScope=api://<api-client-id>/upload.write `
+  -PuploadApiScope=api://<api-client-id>/upload.write `
+  -PgalleryManageScope=api://<api-client-id>/gallery.manage `
   -PmsalRedirectPath=<signature-hash> `
   ktlintCheck detekt lintDebug testDebugUnitTest assembleDebug
 ```
@@ -46,7 +47,8 @@ Override at build time:
 ```powershell
 gradle `
   -PapiBaseUrl=https://<function-app>.azurewebsites.net/api/ `
-  -PapiScope=api://<api-client-id>/upload.write `
+  -PuploadApiScope=api://<api-client-id>/upload.write `
+  -PgalleryManageScope=api://<api-client-id>/gallery.manage `
   -PmsalRedirectPath=<signature-hash> `
   assembleDebug
 ```

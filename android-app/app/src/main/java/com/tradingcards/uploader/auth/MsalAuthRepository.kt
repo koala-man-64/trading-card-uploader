@@ -18,19 +18,33 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class MsalAuthRepository(private val context: Context) {
-    private val scopes = arrayOf(BuildConfig.API_SCOPE)
+    private val uploadScopes = arrayOf(BuildConfig.UPLOAD_API_SCOPE)
+    private val galleryScopes = arrayOf(BuildConfig.GALLERY_MANAGE_SCOPE)
 
     suspend fun signIn(activity: Activity): String {
+        return acquireToken(activity, uploadScopes)
+    }
+
+    suspend fun acquireGalleryManageToken(activity: Activity): String {
+        return acquireToken(activity, galleryScopes)
+    }
+
+    suspend fun acquireToken(
+        activity: Activity,
+        scopes: Array<String>,
+    ): String {
         val app = application()
         existingAccount(app)?.let {
-            return acquireTokenSilent(app)
+            return runCatching { acquireTokenSilent(app, scopes) }
+                .getOrElse { interactiveSignIn(app, activity, scopes) }
         }
-        return interactiveSignIn(app, activity)
+        return interactiveSignIn(app, activity, scopes)
     }
 
     private suspend fun interactiveSignIn(
         app: ISingleAccountPublicClientApplication,
         activity: Activity,
+        scopes: Array<String>,
     ): String =
         suspendCancellableCoroutine { continuation ->
             app.signIn(
@@ -56,10 +70,13 @@ class MsalAuthRepository(private val context: Context) {
     suspend fun acquireTokenSilent(): String {
         val app = application()
         currentAccount(app)
-        return acquireTokenSilent(app)
+        return acquireTokenSilent(app, uploadScopes)
     }
 
-    private suspend fun acquireTokenSilent(app: ISingleAccountPublicClientApplication): String =
+    private suspend fun acquireTokenSilent(
+        app: ISingleAccountPublicClientApplication,
+        scopes: Array<String>,
+    ): String =
         suspendCancellableCoroutine { continuation ->
             app.acquireTokenSilentAsync(
                 scopes,

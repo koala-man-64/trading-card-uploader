@@ -85,6 +85,7 @@ $outputs = $deployment.properties.outputs
 $values = [ordered]@{
     ANDROID_API_BASE_URL = Get-OutputValue -Outputs $outputs -Name "androidApiBaseUrl"
     ANDROID_API_SCOPE = Get-OutputValue -Outputs $outputs -Name "androidApiScope"
+    ANDROID_GALLERY_MANAGE_SCOPE = Get-OutputValue -Outputs $outputs -Name "androidGalleryManageScope"
     FUNCTION_APP_NAME = Get-OutputValue -Outputs $outputs -Name "functionAppName"
     UPLOAD_STORAGE_ACCOUNT_NAME = Get-OutputValue -Outputs $outputs -Name "uploadStorageAccountName"
     UPLOAD_CONTAINER_NAME = Get-OutputValue -Outputs $outputs -Name "uploadContainerName"

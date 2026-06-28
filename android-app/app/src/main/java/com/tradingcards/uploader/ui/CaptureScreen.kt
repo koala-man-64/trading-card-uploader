@@ -16,6 +16,7 @@ import com.tradingcards.uploader.model.UploadEntity
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 fun CaptureScreen(
+    modifier: Modifier = Modifier,
     statusText: String,
     latestUpload: UploadEntity?,
     onSignIn: () -> Unit,
@@ -24,7 +25,7 @@ fun CaptureScreen(
     MaterialTheme {
         Column(
             modifier =
-                Modifier
+                modifier
                     .fillMaxSize()
                     .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),

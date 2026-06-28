@@ -6,7 +6,7 @@ This repo is phone-ready when a physical Android phone can install the dev APK, 
 
 Configure Entra before building the phone APK:
 
-- API app registration exposes `upload.write` at `api://<api-client-id>/upload.write`.
+- API app registration exposes `upload.write` and `gallery.manage` at the API app ID URI.
 - Android public client registration uses package `com.tradingcards.uploader`.
 - Android redirect URI is `msauth://com.tradingcards.uploader/<dev-signature-hash>`.
 - GitHub Azure OIDC app has a federated credential for the `dev` environment.
@@ -36,6 +36,7 @@ Variables:
 - `ANDROID_TENANT_ID`
 - `ANDROID_API_BASE_URL`
 - `ANDROID_API_SCOPE`
+- `ANDROID_GALLERY_MANAGE_SCOPE`
 - `ANDROID_MSAL_SIGNATURE_HASH`
 - `FUNCTION_APP_NAME`
 - `SMOKE_PRINCIPAL_ID`
