@@ -38,7 +38,7 @@ Variables:
 - `ANDROID_API_SCOPE`
 - `ANDROID_MSAL_SIGNATURE_HASH`
 - `FUNCTION_APP_NAME`
-- `GITHUB_SMOKE_PRINCIPAL_ID`
+- `SMOKE_PRINCIPAL_ID`
 - `UPLOAD_STORAGE_ACCOUNT_NAME`
 - `UPLOAD_CONTAINER_NAME`
 - `APP_INSIGHTS_NAME`
@@ -101,4 +101,4 @@ Write-only SAS behavior is proven by the Function unit tests so the app and smok
 - If the app stays in retry or failed state, inspect the displayed last error and correlate with Function/App Insights traces by upload ID.
 - If `phone-apk` fails validation, replace the placeholder or missing GitHub environment value named in the workflow log.
 - If `phone-apk` reports a signing hash mismatch, rerun `Initialize-DevPhoneEnvironment.ps1` with the same `.local/phone-dev/` keystore or update the Entra Android redirect URI to the current hash.
-- If `phone-smoke-verify` cannot query blob or telemetry evidence, verify `GITHUB_SMOKE_PRINCIPAL_ID` was passed to `infra-ci` and that the dev deployment has completed with smoke-reader RBAC assignments.
+- If `phone-smoke-verify` cannot query blob or telemetry evidence, verify `SMOKE_PRINCIPAL_ID` was passed to `infra-ci` and that the dev deployment has completed with smoke-reader RBAC assignments.
