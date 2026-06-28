@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
+from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -89,13 +90,16 @@ def test_require_raw_image_blob_name_rejects_non_raw_targets() -> None:
 def test_raw_gallery_list_paginates_and_filters_images() -> None:
     payload = list_raw_images(
         settings(),
-        _Container(
-            [
-                "raw/a.jpg",
-                "raw/b.txt",
-                "raw/c.heic",
-                "manifests/ignored.json",
-            ]
+        cast(
+            Any,
+            _Container(
+                [
+                    "raw/a.jpg",
+                    "raw/b.txt",
+                    "raw/c.heic",
+                    "manifests/ignored.json",
+                ]
+            ),
         ),
         limit=1,
         cursor=None,
