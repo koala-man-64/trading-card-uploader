@@ -11,6 +11,8 @@ import com.tradingcards.uploader.data.BlobUploader
 import com.tradingcards.uploader.data.SasIssuerClient
 import com.tradingcards.uploader.data.UploadQueueDao
 import com.tradingcards.uploader.data.UploadRepository
+import com.tradingcards.uploader.data.currentUploadContentLength
+import com.tradingcards.uploader.data.resolveCurrentContentLengthBytes
 import com.tradingcards.uploader.model.SasRequest
 import com.tradingcards.uploader.model.SasResponse
 import com.tradingcards.uploader.model.UploadEntity
@@ -41,6 +43,7 @@ class UploadWorker(
         val attempt = entity.attemptCount + 1
 
         return try {
+            val blobUpload = prepareBlobUpload(dao, uploadId, entity)
             dao.updateStatus(
                 uploadId,
                 UploadStatus.RequestingSas,
@@ -56,7 +59,7 @@ class UploadWorker(
                         SasRequest(
                             clientUploadId = uploadId,
                             contentType = entity.contentType,
-                            contentLengthBytes = entity.contentLengthBytes,
+                            contentLengthBytes = blobUpload.contentLengthBytes,
                             sha256Hex = entity.sha256Hex,
                         ),
                 )
@@ -76,7 +79,7 @@ class UploadWorker(
                     blobName = sas.blobName,
                     updatedAtEpochMillis = System.currentTimeMillis(),
                 )
-                uploadBlob(dao, uploadId, entity, sas, attempt)
+                uploadBlob(dao, uploadId, blobUpload, sas, attempt)
             }
         } catch (exception: IOException) {
             handleNetworkFailure(dao, uploadId, attempt, exception.message)
@@ -87,18 +90,36 @@ class UploadWorker(
         }
     }
 
-    private suspend fun uploadBlob(
+    private suspend fun prepareBlobUpload(
         dao: UploadQueueDao,
         uploadId: String,
         entity: UploadEntity,
+    ): PendingBlobUpload {
+        val uploadUri = Uri.parse(entity.localUri)
+        val contentLengthBytes =
+            currentUploadContentLength(
+                storedContentLengthBytes = entity.contentLengthBytes,
+                resolvedContentLengthBytes = resolveCurrentContentLengthBytes(applicationContext, uploadUri),
+            )
+        check(contentLengthBytes > 0) { "Upload content length is invalid: $contentLengthBytes" }
+        if (contentLengthBytes != entity.contentLengthBytes) {
+            dao.updateContentLength(uploadId, contentLengthBytes, System.currentTimeMillis())
+        }
+        return PendingBlobUpload(uploadUri, contentLengthBytes)
+    }
+
+    private suspend fun uploadBlob(
+        dao: UploadQueueDao,
+        uploadId: String,
+        blobUpload: PendingBlobUpload,
         sas: SasResponse,
         attempt: Int,
     ): Result {
         dao.updateStatus(uploadId, UploadStatus.Uploading, attempt, null, System.currentTimeMillis())
         val uploadResult =
             BlobUploader(applicationContext).upload(
-                uri = Uri.parse(entity.localUri),
-                contentLengthBytes = entity.contentLengthBytes,
+                uri = blobUpload.uploadUri,
+                contentLengthBytes = blobUpload.contentLengthBytes,
                 uploadUrl = sas.uploadUrl,
                 requiredHeaders = sas.requiredHeaders,
             )
@@ -164,3 +185,8 @@ class UploadWorker(
         private val SUCCESSFUL_UPLOAD_CODES = setOf(HTTP_OK, HTTP_CREATED)
     }
 }
+
+private data class PendingBlobUpload(
+    val uploadUri: Uri,
+    val contentLengthBytes: Long,
+)

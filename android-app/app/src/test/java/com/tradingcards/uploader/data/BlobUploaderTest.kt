@@ -36,6 +36,32 @@ class BlobUploaderTest {
     }
 
     @Test
+    fun uploadSummaryIncludesHeadersAndContentLength() {
+        val summary =
+            blobUploadRequestSummary(
+                headers =
+                    mapOf(
+                        "x-ms-blob-type" to "BlockBlob",
+                        "x-ms-version" to "2021-08-06",
+                    ),
+                contentLengthBytes = 123,
+            )
+
+        assertEquals(
+            "Blob PUT contentLengthBytes=123 headers={x-ms-blob-type=BlockBlob, x-ms-version=2021-08-06}",
+            summary,
+        )
+    }
+
+    @Test
+    fun currentUploadContentLengthUsesResolvedLengthWhenAvailable() {
+        assertEquals(
+            321,
+            currentUploadContentLength(storedContentLengthBytes = 123, resolvedContentLengthBytes = 321),
+        )
+    }
+
+    @Test
     fun includesAzureHeadersAndNormalizedBodyInFailureMessage() {
         val message =
             buildBlobFailureMessage(
@@ -51,7 +77,12 @@ class BlobUploaderTest {
             )
 
         assertEquals(
-            "Blob upload failed: 400 | azure=InvalidHeaderValue | requestId=req-123 | body=<Error> <Message>Bad header</Message> </Error>",
+            listOf(
+                "Blob upload failed: 400",
+                "azure=InvalidHeaderValue",
+                "requestId=req-123",
+                "body=<Error> <Message>Bad header</Message> </Error>",
+            ).joinToString(" | "),
             message,
         )
     }

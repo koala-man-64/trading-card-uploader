@@ -42,14 +42,14 @@ Response:
   "expiresAtUtc": "2026-06-27T18:20:00Z",
   "requiredHeaders": {
     "x-ms-blob-type": "BlockBlob",
-    "x-ms-version": "2023-11-03",
+    "x-ms-version": "2021-08-06",
     "Content-Type": "image/jpeg"
   },
   "maxContentLengthBytes": 10485760
 }
 ```
 
-Clients must send every `requiredHeaders` entry with the blob `PUT`.
+Clients must send every `requiredHeaders` entry with the blob `PUT`. The `x-ms-version` value is configured by the issuer so local/emulator and hosted storage endpoints can use a mutually supported service version without changing the response shape.
 
 ## Validation
 

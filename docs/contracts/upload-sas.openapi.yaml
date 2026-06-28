@@ -93,7 +93,7 @@ components:
             type: string
           example:
             x-ms-blob-type: BlockBlob
-            x-ms-version: "2023-11-03"
+            x-ms-version: "2021-08-06"
             Content-Type: image/jpeg
         maxContentLengthBytes:
           type: integer

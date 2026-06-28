@@ -26,6 +26,7 @@ def settings() -> Settings:
         sas_signer_mode="managed_identity",
         storage_connection_string=None,
         managed_identity_client_id=None,
+        storage_api_version=AZURE_STORAGE_API_VERSION,
     )
 
 
@@ -72,6 +73,19 @@ def test_upload_response_includes_required_blob_headers() -> None:
         "x-ms-version": AZURE_STORAGE_API_VERSION,
         "Content-Type": "image/jpeg",
     }
+
+
+def test_upload_response_uses_configured_storage_api_version() -> None:
+    response = UploadSasResponse(
+        upload_id="11111111-1111-1111-1111-111111111111",
+        blob_name="raw/tenant/user/20260628/upload.jpg",
+        upload_url="https://upload.blob.core.windows.net/card-uploads/raw/blob.jpg?sig=test",
+        expires_at_utc=datetime(2026, 6, 28, 18, 30, tzinfo=UTC),
+        max_content_length_bytes=10,
+        storage_api_version="2020-10-02",
+    )
+
+    assert response.to_json()["requiredHeaders"]["x-ms-version"] == "2020-10-02"
 
 
 @pytest.mark.parametrize(

@@ -29,6 +29,20 @@ interface UploadQueueDao {
     @Query(
         """
         UPDATE upload_queue
+        SET contentLengthBytes = :contentLengthBytes,
+            updatedAtEpochMillis = :updatedAtEpochMillis
+        WHERE uploadId = :uploadId
+        """,
+    )
+    suspend fun updateContentLength(
+        uploadId: String,
+        contentLengthBytes: Long,
+        updatedAtEpochMillis: Long,
+    )
+
+    @Query(
+        """
+        UPDATE upload_queue
         SET status = :status,
             attemptCount = :attemptCount,
             lastError = :lastError,
