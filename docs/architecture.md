@@ -22,6 +22,13 @@ Azure Blob Storage upload container
 
 The API does not proxy image bytes. It only validates the caller, chooses a server-generated blob path, reserves the idempotency key, and returns a short-lived SAS URL for one blob.
 
+## Scanner Ingestion Contract
+
+- Original image uploads are written under `raw/{tenantHash}/{userHash}/{yyyyMMdd}/{uploadId}.<ext>`.
+- Idempotency manifests are written under `manifests/{tenantHash}/{userHash}/{clientUploadId}.json`.
+- `trading-card-scanner` must watch only the `raw/` prefix of this upload container.
+- The scanner owns crop extraction and gallery output; this repo owns capture, authentication, and write-only upload authorization.
+
 ## Trust Boundary
 
 - Android is a public client and must never contain confidential credentials.

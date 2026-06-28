@@ -56,6 +56,16 @@ Response:
 - `sha256Hex`, when provided, must be a 64-character hex digest.
 - The original filename is not accepted and is never used in the blob path.
 
+## Storage Contract
+
+- Image blobs are issued only under the `raw/` prefix.
+- Idempotency manifests are stored under `manifests/` and are not scanner inputs.
+- Scanner deployments that consume this uploader storage account must configure
+  their blob trigger for the `raw/` prefix.
+- HEIC uploads use `.heic` blob names and `Content-Type: image/heic`; scanner
+  deployments must keep HEIC/HEIF decoding enabled when processing this
+  container.
+
 ## Auth
 
 - Token type: Entra access token.
