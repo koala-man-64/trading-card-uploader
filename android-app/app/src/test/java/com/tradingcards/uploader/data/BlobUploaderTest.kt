@@ -1,7 +1,9 @@
 package com.tradingcards.uploader.data
 
+import okhttp3.Headers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BlobUploaderTest {
@@ -31,5 +33,42 @@ class BlobUploaderTest {
         val contentType = blobContentType(mapOf("content-type" to "image/heic"))
 
         assertEquals("image/heic", contentType)
+    }
+
+    @Test
+    fun includesAzureHeadersAndNormalizedBodyInFailureMessage() {
+        val message =
+            buildBlobFailureMessage(
+                statusCode = 400,
+                headers =
+                    Headers.headersOf(
+                        "x-ms-error-code",
+                        "InvalidHeaderValue",
+                        "x-ms-request-id",
+                        "req-123",
+                    ),
+                bodyText = "  <Error>\n    <Message>Bad header</Message>\n  </Error>  ",
+            )
+
+        assertEquals(
+            "Blob upload failed: 400 | azure=InvalidHeaderValue | requestId=req-123 | body=<Error> <Message>Bad header</Message> </Error>",
+            message,
+        )
+    }
+
+    @Test
+    fun truncatesLongFailureBody() {
+        val longBody = "x".repeat(400)
+
+        val message =
+            buildBlobFailureMessage(
+                statusCode = 400,
+                headers = Headers.headersOf(),
+                bodyText = longBody,
+            )
+
+        assertTrue(message.startsWith("Blob upload failed: 400 | body="))
+        assertTrue(message.endsWith("..."))
+        assertTrue(message.length < 320)
     }
 }
