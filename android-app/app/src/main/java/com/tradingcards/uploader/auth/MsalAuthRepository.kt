@@ -94,7 +94,7 @@ class MsalAuthRepository(private val context: Context) {
 
     private suspend fun currentAccount(app: ISingleAccountPublicClientApplication): IAccount =
         existingAccount(app)
-            ?: throw IllegalStateException("No signed-in account is available")
+            ?: error("No signed-in account is available")
 
     private suspend fun existingAccount(app: ISingleAccountPublicClientApplication): IAccount? =
         suspendCancellableCoroutine { continuation ->
