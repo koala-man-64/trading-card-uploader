@@ -174,7 +174,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   tags: tags
   kind: 'functionapp,linux'
   identity: {
-    type: 'UserAssigned'
+    type: 'SystemAssigned, UserAssigned'
     userAssignedIdentities: {
       '${identity.id}': {}
     }
@@ -319,6 +319,16 @@ resource githubDeployHostBlobContributor 'Microsoft.Authorization/roleAssignment
   properties: {
     roleDefinitionId: storageBlobDataContributorRoleId
     principalId: githubSmokePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource functionPackageHostBlobReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(hostStorage.id, functionApp.id, 'function-package-host-blob-reader')
+  scope: hostStorage
+  properties: {
+    roleDefinitionId: storageBlobDataReaderRoleId
+    principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'
   }
 }

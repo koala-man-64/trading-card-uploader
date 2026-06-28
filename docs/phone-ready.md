@@ -20,7 +20,7 @@ The repo-provided setup script can create or update those dev registrations, gen
   -AssignAzureRoles
 ```
 
-The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere. `SMOKE_PRINCIPAL_ID` is that same service principal object ID, and dev infra grants it the host-storage package-publish role plus smoke-verification reader roles.
+The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere. `SMOKE_PRINCIPAL_ID` is that same service principal object ID, and dev infra grants it the host-storage package-publish role plus smoke-verification reader roles. The Function App uses a system-assigned identity for package reads and the user-assigned identity for SAS/storage operations.
 
 Configure the GitHub `dev` environment:
 
