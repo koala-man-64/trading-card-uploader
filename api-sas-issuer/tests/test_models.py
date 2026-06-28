@@ -42,6 +42,20 @@ def test_accepts_valid_request() -> None:
     assert request.fingerprint == f"image/jpeg:9:{'a' * 64}"
 
 
+def test_accepts_heic_request() -> None:
+    request = UploadSasRequest.from_json(
+        {
+            "clientUploadId": "11111111-1111-1111-1111-111111111111",
+            "contentType": "image/heic",
+            "contentLengthBytes": 9,
+        },
+        settings(),
+    )
+
+    assert request.file_extension == "heic"
+    assert request.fingerprint == "image/heic:9:no-checksum"
+
+
 @pytest.mark.parametrize(
     ("payload", "code"),
     [

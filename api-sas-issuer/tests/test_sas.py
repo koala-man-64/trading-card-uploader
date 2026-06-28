@@ -13,6 +13,7 @@ from shared.sas import (
     MemoryIdempotencyStore,
     SasIssuer,
     StaticSasSigner,
+    _manifest_name,
     build_blob_name,
 )
 
@@ -69,6 +70,32 @@ def test_blob_name_is_server_generated_and_partitioned() -> None:
     assert blob_name.endswith(".jpg")
     assert "20260627" in blob_name
     assert "11111111" not in blob_name
+
+
+def test_manifest_name_stays_outside_scanner_raw_prefix() -> None:
+    manifest_name = _manifest_name(claims(), request(), settings())
+
+    assert manifest_name.startswith("manifests/")
+    assert not manifest_name.startswith("raw/")
+
+
+def test_heic_blob_name_uses_heic_extension() -> None:
+    heic_request = UploadSasRequest(
+        client_upload_id="11111111-1111-1111-1111-111111111111",
+        content_type="image/heic",
+        content_length_bytes=9,
+        sha256_hex=None,
+    )
+
+    blob_name = build_blob_name(
+        settings(),
+        claims(),
+        heic_request,
+        datetime(2026, 6, 27, tzinfo=UTC),
+    )
+
+    assert blob_name.startswith("raw/")
+    assert blob_name.endswith(".heic")
 
 
 def test_issuer_reuses_same_idempotency_key_for_same_payload() -> None:

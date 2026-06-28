@@ -21,4 +21,12 @@ This repo now contains the first vertical-slice implementation:
 6. Android uploads the image bytes directly to Blob Storage.
 7. Android marks the local upload complete after Blob Storage returns success.
 
+## Scanner Integration
+
+This app is the capture-ingest exception to the scanner's normal HTTP-first
+Android guidance. It uploads original images under `raw/` in the private upload
+container, while SAS idempotency metadata is stored under `manifests/`.
+Configure `trading-card-scanner` to watch only the `raw/` prefix so it processes
+captured images and ignores metadata blobs.
+
 See [docs/contracts/upload-sas-api.md](docs/contracts/upload-sas-api.md) and [docs/local-dev.md](docs/local-dev.md).
