@@ -19,6 +19,22 @@ Monitor:
 4. Check upload storage logs for failed writes.
 5. Use `uploadId` to correlate Android logs, Function traces, and blob path.
 
+## Dev Phone Smoke Evidence
+
+After a physical phone upload reaches `Complete`, run the `phone-smoke-verify` workflow with the displayed client upload ID, server upload ID, and blob name. The workflow verifies:
+
+- the blob exists in the private dev container through RBAC;
+- App Insights has request or trace telemetry for the upload evidence;
+- telemetry does not contain bearer markers, SAS URLs, or `sig=` values.
+
+If infrastructure was redeployed, run:
+
+```powershell
+.\scripts\Sync-DevInfraOutputs.ps1 -ResourceGroup <dev-resource-group>
+```
+
+before `phone-apk` or `phone-smoke-verify` so GitHub environment variables match the latest Bicep outputs.
+
 ## Rollback
 
 - Function: redeploy the previous package artifact.
