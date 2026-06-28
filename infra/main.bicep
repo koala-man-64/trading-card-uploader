@@ -313,6 +313,16 @@ resource hostBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01
   }
 }
 
+resource githubDeployHostBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubSmokePrincipalId) && env != 'prod') {
+  name: guid(hostStorage.id, githubSmokePrincipalId, 'github-deploy-host-blob-contributor')
+  scope: hostStorage
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleId
+    principalId: githubSmokePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 resource uploadDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(uploadStorage.id, identity.id, 'upload-blob-delegator')
   scope: uploadStorage

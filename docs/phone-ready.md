@@ -20,7 +20,7 @@ The repo-provided setup script can create or update those dev registrations, gen
   -AssignAzureRoles
 ```
 
-The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere.
+The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere. `SMOKE_PRINCIPAL_ID` is that same service principal object ID, and dev infra grants it the host-storage package-publish role plus smoke-verification reader roles.
 
 Configure the GitHub `dev` environment:
 
@@ -101,4 +101,5 @@ Write-only SAS behavior is proven by the Function unit tests so the app and smok
 - If the app stays in retry or failed state, inspect the displayed last error and correlate with Function/App Insights traces by upload ID.
 - If `phone-apk` fails validation, replace the placeholder or missing GitHub environment value named in the workflow log.
 - If `phone-apk` reports a signing hash mismatch, rerun `Initialize-DevPhoneEnvironment.ps1` with the same `.local/phone-dev/` keystore or update the Entra Android redirect URI to the current hash.
+- If `function-ci` fails during package publish with a storage authorization error, verify `SMOKE_PRINCIPAL_ID` was passed to `infra-ci` and that the dev deployment completed after the host-storage deploy RBAC assignment was added.
 - If `phone-smoke-verify` cannot query blob or telemetry evidence, verify `SMOKE_PRINCIPAL_ID` was passed to `infra-ci` and that the dev deployment has completed with smoke-reader RBAC assignments.
