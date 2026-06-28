@@ -1,0 +1,9 @@
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.python_packages/
+__pycache__/
+*.pyc
+local.settings*.json
+requirements-dev.txt
+tests/
