@@ -13,6 +13,7 @@ from shared.sas import (
     MemoryIdempotencyStore,
     SasIssuer,
     StaticSasSigner,
+    _blob_sas_url,
     _manifest_name,
     build_blob_name,
 )
@@ -115,6 +116,17 @@ def test_issuer_passes_configured_storage_api_version_to_required_headers() -> N
     response = issuer.issue(request(), claims(), datetime(2026, 6, 27, tzinfo=UTC))
 
     assert response.to_json()["requiredHeaders"]["x-ms-version"] == "2020-10-02"
+
+
+def test_blob_sas_url_normalizes_trailing_endpoint_slash() -> None:
+    url = _blob_sas_url(
+        "https://upload.blob.core.windows.net/",
+        "card-uploads",
+        "raw/tenant/user/20260628/upload.jpg",
+        "sig=test",
+    )
+
+    assert url == "https://upload.blob.core.windows.net/card-uploads/raw/tenant/user/20260628/upload.jpg?sig=test"
 
 
 def test_issuer_rejects_idempotency_conflict() -> None:

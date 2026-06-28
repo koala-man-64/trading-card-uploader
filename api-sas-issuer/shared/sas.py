@@ -41,6 +41,15 @@ class SasSigner(Protocol):
         ...
 
 
+def _blob_sas_url(
+    endpoint: str,
+    container_name: str,
+    blob_name: str,
+    sas: str,
+) -> str:
+    return f"{endpoint.rstrip('/')}/{container_name}/{blob_name}?{sas}"
+
+
 def _hash(value: str, salt: str) -> str:
     return hashlib.sha256(f"{salt}:{value}".encode()).hexdigest()[:24]
 
@@ -134,7 +143,7 @@ class UserDelegationSasSigner:
             expiry=expires_at,
             protocol="https",
         )
-        return f"{self._service.url}/{self._settings.upload_container_name}/{blob_name}?{sas}"
+        return _blob_sas_url(self._service.url, self._settings.upload_container_name, blob_name, sas)
 
 
 class ConnectionStringSasSigner:
@@ -168,7 +177,7 @@ class ConnectionStringSasSigner:
             expiry=expires_at,
             protocol="https" if self._endpoint.startswith("https://") else None,
         )
-        return f"{self._endpoint.rstrip('/')}/{self._settings.upload_container_name}/{blob_name}?{sas}"
+        return _blob_sas_url(self._endpoint, self._settings.upload_container_name, blob_name, sas)
 
 
 class SasIssuer:
