@@ -75,7 +75,6 @@ class MsalAuthRepository(private val context: Context) {
                 },
             )
         }
-    }
 
     private fun defaultAuthorityUrl(): String {
         val config =
