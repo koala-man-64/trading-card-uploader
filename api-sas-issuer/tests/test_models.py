@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from shared.config import Settings
-from shared.models import Problem, UploadSasRequest
+from shared.models import AZURE_STORAGE_API_VERSION, Problem, UploadSasRequest, UploadSasResponse
 
 
 def settings() -> Settings:
@@ -54,6 +56,22 @@ def test_accepts_heic_request() -> None:
 
     assert request.file_extension == "heic"
     assert request.fingerprint == "image/heic:9:no-checksum"
+
+
+def test_upload_response_includes_required_blob_headers() -> None:
+    response = UploadSasResponse(
+        upload_id="11111111-1111-1111-1111-111111111111",
+        blob_name="raw/tenant/user/20260628/upload.jpg",
+        upload_url="https://upload.blob.core.windows.net/card-uploads/raw/blob.jpg?sig=test",
+        expires_at_utc=datetime(2026, 6, 28, 18, 30, tzinfo=UTC),
+        max_content_length_bytes=10,
+    )
+
+    assert response.to_json()["requiredHeaders"] == {
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": AZURE_STORAGE_API_VERSION,
+        "Content-Type": "image/jpeg",
+    }
 
 
 @pytest.mark.parametrize(
