@@ -32,7 +32,7 @@ class MsalAuthRepository(private val context: Context) {
         app: ISingleAccountPublicClientApplication,
         activity: Activity,
     ): String =
-        return suspendCancellableCoroutine { continuation ->
+        suspendCancellableCoroutine { continuation ->
             app.signIn(
                 activity,
                 null,
