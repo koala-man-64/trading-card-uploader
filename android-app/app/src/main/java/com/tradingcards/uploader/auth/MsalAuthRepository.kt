@@ -13,6 +13,7 @@ import com.microsoft.identity.client.exception.MsalException
 import com.tradingcards.uploader.BuildConfig
 import com.tradingcards.uploader.R
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONObject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -45,11 +46,11 @@ class MsalAuthRepository(private val context: Context) {
 
     suspend fun acquireTokenSilent(): String {
         val app = application()
-        val account = currentAccount(app)
+        currentAccount(app)
         return suspendCancellableCoroutine { continuation ->
             app.acquireTokenSilentAsync(
                 scopes,
-                account.authority,
+                defaultAuthorityUrl(),
                 object : SilentAuthenticationCallback {
                     override fun onSuccess(authenticationResult: IAuthenticationResult) {
                         continuation.resume(authenticationResult.accessToken)
@@ -61,6 +62,21 @@ class MsalAuthRepository(private val context: Context) {
                 },
             )
         }
+    }
+
+    private fun defaultAuthorityUrl(): String {
+        val config =
+            context.resources
+                .openRawResource(R.raw.msal_auth_config)
+                .bufferedReader()
+                .use { it.readText() }
+        val tenantId =
+            JSONObject(config)
+                .getJSONArray("authorities")
+                .getJSONObject(0)
+                .getJSONObject("audience")
+                .getString("tenant_id")
+        return "https://login.microsoftonline.com/$tenantId"
     }
 
     private suspend fun currentAccount(app: ISingleAccountPublicClientApplication): IAccount =
