@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
         val authRepository = MsalAuthRepository(this)
 
         setContent {
-            UploaderApp(
+            uploaderApp(
                 uploadQueueDao = database.uploadQueueDao(),
                 repository = repository,
                 authRepository = authRepository,
@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun UploaderApp(
+    private fun uploaderApp(
         uploadQueueDao: UploadQueueDao,
         repository: UploadRepository,
         authRepository: MsalAuthRepository,
