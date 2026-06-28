@@ -98,6 +98,7 @@ class UploadWorker(
         val uploadCode =
             BlobUploader(applicationContext).upload(
                 uri = Uri.parse(entity.localUri),
+                contentLengthBytes = entity.contentLengthBytes,
                 uploadUrl = sas.uploadUrl,
                 requiredHeaders = sas.requiredHeaders,
             )

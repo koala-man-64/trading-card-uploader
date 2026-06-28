@@ -22,7 +22,17 @@ class MsalAuthRepository(private val context: Context) {
 
     suspend fun signIn(activity: Activity): String {
         val app = application()
-        return suspendCancellableCoroutine { continuation ->
+        existingAccount(app)?.let {
+            return acquireTokenSilent(app)
+        }
+        return interactiveSignIn(app, activity)
+    }
+
+    private suspend fun interactiveSignIn(
+        app: ISingleAccountPublicClientApplication,
+        activity: Activity,
+    ): String =
+        suspendCancellableCoroutine { continuation ->
             app.signIn(
                 activity,
                 null,
@@ -42,12 +52,15 @@ class MsalAuthRepository(private val context: Context) {
                 },
             )
         }
-    }
 
     suspend fun acquireTokenSilent(): String {
         val app = application()
         currentAccount(app)
-        return suspendCancellableCoroutine { continuation ->
+        return acquireTokenSilent(app)
+    }
+
+    private suspend fun acquireTokenSilent(app: ISingleAccountPublicClientApplication): String =
+        suspendCancellableCoroutine { continuation ->
             app.acquireTokenSilentAsync(
                 scopes,
                 defaultAuthorityUrl(),
@@ -62,7 +75,6 @@ class MsalAuthRepository(private val context: Context) {
                 },
             )
         }
-    }
 
     private fun defaultAuthorityUrl(): String {
         val config =
@@ -80,17 +92,15 @@ class MsalAuthRepository(private val context: Context) {
     }
 
     private suspend fun currentAccount(app: ISingleAccountPublicClientApplication): IAccount =
+        existingAccount(app)
+            ?: error("No signed-in account is available")
+
+    private suspend fun existingAccount(app: ISingleAccountPublicClientApplication): IAccount? =
         suspendCancellableCoroutine { continuation ->
             app.getCurrentAccountAsync(
                 object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
                     override fun onAccountLoaded(activeAccount: IAccount?) {
-                        if (activeAccount == null) {
-                            continuation.resumeWithException(
-                                IllegalStateException("No signed-in account is available"),
-                            )
-                        } else {
-                            continuation.resume(activeAccount)
-                        }
+                        continuation.resume(activeAccount)
                     }
 
                     override fun onAccountChanged(
