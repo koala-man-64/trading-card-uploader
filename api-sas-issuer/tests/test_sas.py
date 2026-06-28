@@ -36,6 +36,7 @@ def settings() -> Settings:
         sas_signer_mode="managed_identity",
         storage_connection_string=None,
         managed_identity_client_id=None,
+        storage_api_version="2020-10-02",
     )
 
 
@@ -108,6 +109,14 @@ def test_issuer_reuses_same_idempotency_key_for_same_payload() -> None:
     assert first.blob_name == second.blob_name
 
 
+def test_issuer_passes_configured_storage_api_version_to_required_headers() -> None:
+    issuer = SasIssuer(settings(), MemoryIdempotencyStore(), StaticSasSigner("https://example/{blobName}?sig=test"))
+
+    response = issuer.issue(request(), claims(), datetime(2026, 6, 27, tzinfo=UTC))
+
+    assert response.to_json()["requiredHeaders"]["x-ms-version"] == "2020-10-02"
+
+
 def test_issuer_rejects_idempotency_conflict() -> None:
     issuer = SasIssuer(settings(), MemoryIdempotencyStore(), StaticSasSigner("https://example/{blobName}?sig=test"))
     issuer.issue(request(size=9), claims(), datetime(2026, 6, 27, tzinfo=UTC))
@@ -142,6 +151,7 @@ def test_generated_sas_grants_create_write_only() -> None:
             "EndpointSuffix=core.windows.net"
         ),
         managed_identity_client_id=None,
+        storage_api_version="2021-08-06",
     )
 
     url = ConnectionStringSasSigner(local_settings).sign(

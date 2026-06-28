@@ -2,6 +2,7 @@ package com.tradingcards.uploader.data
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Headers
@@ -11,11 +12,15 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okio.BufferedSink
 
-internal const val DEFAULT_STORAGE_API_VERSION = "2023-11-03"
+internal const val DEFAULT_STORAGE_API_VERSION = "2021-08-06"
 private const val MAX_FAILURE_BODY_CHARS = 240
+private const val FAILURE_BODY_ELLIPSIS_CHARS = 3
+private const val HTTP_SUCCESS_MIN = 200
+private const val HTTP_SUCCESS_MAX = 299
 private const val CONTENT_TYPE_HEADER = "Content-Type"
 private const val DEFAULT_CONTENT_TYPE = "image/jpeg"
 private const val STORAGE_VERSION_HEADER = "x-ms-version"
+private const val BLOB_UPLOADER_LOG_TAG = "BlobUploader"
 
 data class BlobUploadResult(
     val statusCode: Int,
@@ -36,6 +41,7 @@ class BlobUploader(
             val uploadHeaders = blobUploadHeaders(requiredHeaders)
             val contentType = blobContentType(uploadHeaders)
             val body = ContentUriRequestBody(context, uri, contentType, contentLengthBytes)
+            Log.d(BLOB_UPLOADER_LOG_TAG, blobUploadRequestSummary(uploadHeaders, contentLengthBytes))
             val builder =
                 Request.Builder()
                     .url(uploadUrl)
@@ -43,7 +49,7 @@ class BlobUploader(
             uploadHeaders.forEach { (name, value) -> builder.header(name, value) }
             client.newCall(builder.build()).execute().use { response ->
                 val statusCode = response.code
-                if (statusCode in 200..299) {
+                if (statusCode in HTTP_SUCCESS_MIN..HTTP_SUCCESS_MAX) {
                     BlobUploadResult(statusCode = statusCode)
                 } else {
                     BlobUploadResult(
@@ -73,6 +79,14 @@ internal fun blobContentType(headers: Map<String, String>): String =
         ?.value
         ?: DEFAULT_CONTENT_TYPE
 
+internal fun blobUploadRequestSummary(
+    headers: Map<String, String>,
+    contentLengthBytes: Long,
+): String {
+    val headerSummary = headers.entries.joinToString(", ") { (name, value) -> "$name=$value" }
+    return "Blob PUT contentLengthBytes=$contentLengthBytes headers={$headerSummary}"
+}
+
 internal fun buildBlobFailureMessage(
     statusCode: Int,
     headers: Headers,
@@ -100,7 +114,7 @@ private fun normalizeFailureBody(bodyText: String?): String? {
     return if (normalized.length <= MAX_FAILURE_BODY_CHARS) {
         normalized
     } else {
-        normalized.take(MAX_FAILURE_BODY_CHARS - 3) + "..."
+        normalized.take(MAX_FAILURE_BODY_CHARS - FAILURE_BODY_ELLIPSIS_CHARS) + "..."
     }
 }
 

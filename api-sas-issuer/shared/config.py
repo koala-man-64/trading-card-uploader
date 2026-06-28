@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+DEFAULT_AZURE_STORAGE_API_VERSION = "2021-08-06"
+
 
 def _csv(value: str | None) -> tuple[str, ...]:
     if not value:
@@ -35,6 +37,7 @@ class Settings:
     sas_signer_mode: str
     storage_connection_string: str | None
     managed_identity_client_id: str | None
+    storage_api_version: str
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -62,6 +65,10 @@ class Settings:
             sas_signer_mode=os.getenv("SAS_SIGNER_MODE", "managed_identity").strip(),
             storage_connection_string=os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
             managed_identity_client_id=os.getenv("MANAGED_IDENTITY_CLIENT_ID"),
+            storage_api_version=os.getenv(
+                "AZURE_STORAGE_API_VERSION",
+                DEFAULT_AZURE_STORAGE_API_VERSION,
+            ).strip(),
         )
         settings.validate()
         return settings
@@ -87,3 +94,5 @@ class Settings:
             raise ValueError("SAS_SIGNER_MODE must be managed_identity or connection_string")
         if self.sas_signer_mode == "connection_string" and not self.storage_connection_string:
             raise ValueError("AZURE_STORAGE_CONNECTION_STRING is required for connection_string mode")
+        if not self.storage_api_version:
+            raise ValueError("AZURE_STORAGE_API_VERSION must not be blank")

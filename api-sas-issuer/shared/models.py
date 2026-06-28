@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from .config import Settings
+from .config import DEFAULT_AZURE_STORAGE_API_VERSION, Settings
 
 _SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
-AZURE_STORAGE_API_VERSION = "2023-11-03"
+AZURE_STORAGE_API_VERSION = DEFAULT_AZURE_STORAGE_API_VERSION
 
 
 class Problem(Exception):
@@ -98,6 +98,7 @@ class UploadSasResponse:
     upload_url: str
     expires_at_utc: datetime
     max_content_length_bytes: int
+    storage_api_version: str = AZURE_STORAGE_API_VERSION
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -110,7 +111,7 @@ class UploadSasResponse:
             .replace("+00:00", "Z"),
             "requiredHeaders": {
                 "x-ms-blob-type": "BlockBlob",
-                "x-ms-version": AZURE_STORAGE_API_VERSION,
+                "x-ms-version": self.storage_api_version,
                 "Content-Type": "image/jpeg" if self.blob_name.endswith(".jpg") else "image/heic",
             },
             "maxContentLengthBytes": self.max_content_length_bytes,

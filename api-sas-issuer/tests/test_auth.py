@@ -25,6 +25,7 @@ def settings() -> Settings:
         sas_signer_mode="managed_identity",
         storage_connection_string=None,
         managed_identity_client_id=None,
+        storage_api_version="2021-08-06",
     )
 
 

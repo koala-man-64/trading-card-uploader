@@ -201,6 +201,7 @@ class SasIssuer:
             upload_url=self._signer.sign(reserved.blob_name, expires_at),
             expires_at_utc=expires_at,
             max_content_length_bytes=self._settings.max_upload_bytes,
+            storage_api_version=self._settings.storage_api_version,
         )
 
 

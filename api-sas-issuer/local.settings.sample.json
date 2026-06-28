@@ -15,6 +15,7 @@
     "HASH_SALT": "local-development-only",
     "SAS_SIGNER_MODE": "connection_string",
     "AZURE_STORAGE_CONNECTION_STRING": "UseDevelopmentStorage=true",
+    "AZURE_STORAGE_API_VERSION": "2021-08-06",
     "MAX_UPLOAD_BYTES": "10485760",
     "SAS_TTL_MINUTES": "5",
     "ALLOWED_CONTENT_TYPES": "image/jpeg,image/heic"

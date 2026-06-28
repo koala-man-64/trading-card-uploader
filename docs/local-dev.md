@@ -16,6 +16,7 @@ func start --python
 `local.settings.json` is intentionally ignored. Put tenant IDs, app IDs, and local storage emulator values there.
 
 Local Azurite mode uses `SAS_SIGNER_MODE=connection_string`. Use the Azurite development storage credential only in your ignored local settings file.
+`AZURE_STORAGE_API_VERSION` controls the `x-ms-version` header the Android app must send with blob `PUT` requests. Keep the default `2021-08-06` for Azurite or older-compatible local storage endpoints.
 
 ## Android
 
