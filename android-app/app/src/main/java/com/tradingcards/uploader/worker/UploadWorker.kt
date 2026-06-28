@@ -95,14 +95,14 @@ class UploadWorker(
         attempt: Int,
     ): Result {
         dao.updateStatus(uploadId, UploadStatus.Uploading, attempt, null, System.currentTimeMillis())
-        val uploadCode =
+        val uploadResult =
             BlobUploader(applicationContext).upload(
                 uri = Uri.parse(entity.localUri),
                 contentLengthBytes = entity.contentLengthBytes,
                 uploadUrl = sas.uploadUrl,
                 requiredHeaders = sas.requiredHeaders,
             )
-        return if (uploadCode in SUCCESSFUL_UPLOAD_CODES) {
+        return if (uploadResult.statusCode in SUCCESSFUL_UPLOAD_CODES) {
             dao.updateStatus(uploadId, UploadStatus.Uploaded, attempt, null, System.currentTimeMillis())
             dao.updateStatus(uploadId, UploadStatus.Complete, attempt, null, System.currentTimeMillis())
             Result.success()
@@ -111,8 +111,8 @@ class UploadWorker(
                 dao = dao,
                 uploadId = uploadId,
                 attempt = attempt,
-                statusCode = uploadCode,
-                message = "Blob upload failed: $uploadCode",
+                statusCode = uploadResult.statusCode,
+                message = uploadResult.failureMessage ?: "Blob upload failed: ${uploadResult.statusCode}",
             )
         }
     }
