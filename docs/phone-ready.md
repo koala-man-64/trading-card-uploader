@@ -102,4 +102,5 @@ Write-only SAS behavior is proven by the Function unit tests so the app and smok
 - If `phone-apk` fails validation, replace the placeholder or missing GitHub environment value named in the workflow log.
 - If `phone-apk` reports a signing hash mismatch, rerun `Initialize-DevPhoneEnvironment.ps1` with the same `.local/phone-dev/` keystore or update the Entra Android redirect URI to the current hash.
 - If `function-ci` fails during package publish with a storage authorization error, verify `SMOKE_PRINCIPAL_ID` was passed to `infra-ci` and that the dev deployment completed after the host-storage deploy RBAC assignment was added.
+- If `function-ci` deploys but `/api/healthz` returns `404`, check App Insights for worker-indexing or native dependency import errors. Python native dependencies must be built by Azure/Oryx, not copied from the GitHub runner.
 - If `phone-smoke-verify` cannot query blob or telemetry evidence, verify `SMOKE_PRINCIPAL_ID` was passed to `infra-ci` and that the dev deployment has completed with smoke-reader RBAC assignments.
