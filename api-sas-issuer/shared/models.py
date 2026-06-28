@@ -9,6 +9,7 @@ from typing import Any
 from .config import Settings
 
 _SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
+AZURE_STORAGE_API_VERSION = "2023-11-03"
 
 
 class Problem(Exception):
@@ -109,6 +110,7 @@ class UploadSasResponse:
             .replace("+00:00", "Z"),
             "requiredHeaders": {
                 "x-ms-blob-type": "BlockBlob",
+                "x-ms-version": AZURE_STORAGE_API_VERSION,
                 "Content-Type": "image/jpeg" if self.blob_name.endswith(".jpg") else "image/heic",
             },
             "maxContentLengthBytes": self.max_content_length_bytes,

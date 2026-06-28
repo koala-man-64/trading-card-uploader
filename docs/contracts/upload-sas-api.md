@@ -42,11 +42,14 @@ Response:
   "expiresAtUtc": "2026-06-27T18:20:00Z",
   "requiredHeaders": {
     "x-ms-blob-type": "BlockBlob",
+    "x-ms-version": "2023-11-03",
     "Content-Type": "image/jpeg"
   },
   "maxContentLengthBytes": 10485760
 }
 ```
+
+Clients must send every `requiredHeaders` entry with the blob `PUT`.
 
 ## Validation
 

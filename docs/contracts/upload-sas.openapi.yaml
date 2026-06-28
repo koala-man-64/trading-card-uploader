@@ -91,5 +91,9 @@ components:
           type: object
           additionalProperties:
             type: string
+          example:
+            x-ms-blob-type: BlockBlob
+            x-ms-version: "2023-11-03"
+            Content-Type: image/jpeg
         maxContentLengthBytes:
           type: integer
