@@ -41,9 +41,14 @@ import com.tradingcards.uploader.ui.CaptureScreen
 import com.tradingcards.uploader.ui.CaptureScreenActions
 import com.tradingcards.uploader.ui.GalleryScreen
 import com.tradingcards.uploader.ui.GalleryUiState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+
+private const val GALLERY_POLL_INTERVAL_MS = 5_000L
+private const val GALLERY_POLL_FAILURE_BACKOFF_MS = 30_000L
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,37 +82,47 @@ class MainActivity : ComponentActivity() {
         var statusText by remember { mutableStateOf("Ready") }
         var currentPage by remember { mutableStateOf(AppPage.Capture) }
         var galleryState by remember { mutableStateOf(GalleryUiState()) }
+        var galleryRefreshInFlight by remember { mutableStateOf(false) }
         var pendingCapture by remember { mutableStateOf<PendingCapture?>(null) }
 
-        fun loadGallery(category: GalleryCategory = galleryState.category) {
-            galleryState =
-                galleryState.copy(
-                    category = category,
-                    loading = true,
-                    selectedNames = emptySet(),
-                    statusText = "Loading ${category.wireValue} images",
-                )
-            scope.launch {
+        suspend fun refreshGallery(
+            category: GalleryCategory = galleryState.category,
+            reason: GalleryRefreshReason,
+        ): Boolean {
+            if (galleryRefreshInFlight) {
+                return true
+            }
+            galleryRefreshInFlight = true
+            galleryState = galleryStateForRefreshStart(galleryState, category, reason)
+            return try {
                 runCatching {
-                    val token = authRepository.acquireGalleryManageToken(this@MainActivity)
+                    val token =
+                        if (reason == GalleryRefreshReason.Poll) {
+                            authRepository.acquireGalleryManageTokenSilent()
+                        } else {
+                            authRepository.acquireGalleryManageToken(this@MainActivity)
+                        }
                     val loaded = loadGalleryWithRawFallback(token, category, galleryRepository)
-                    token to loaded
-                }.onSuccess { (token, loaded) ->
-                    galleryState =
-                        galleryState.copy(
-                            category = loaded.selectedCategory,
-                            items = loaded.response.items,
-                            loading = false,
-                            statusText = galleryStatusText(loaded),
-                            accessToken = token,
-                        )
-                }.onFailure { error ->
-                    galleryState =
-                        galleryState.copy(
-                            loading = false,
-                            statusText = "Gallery load failed: ${error.message}",
-                        )
-                }
+                    galleryState = galleryStateForRefreshSuccess(galleryState, token, loaded, reason)
+                }.fold(
+                    onSuccess = { true },
+                    onFailure = { error ->
+                        throwIfCancellation(error)
+                        galleryState = galleryStateForRefreshFailure(galleryState, reason, error.message)
+                        false
+                    },
+                )
+            } finally {
+                galleryRefreshInFlight = false
+            }
+        }
+
+        fun launchGalleryRefresh(
+            category: GalleryCategory = galleryState.category,
+            reason: GalleryRefreshReason,
+        ) {
+            scope.launch {
+                refreshGallery(category, reason)
             }
         }
 
@@ -120,40 +135,51 @@ class MainActivity : ComponentActivity() {
             sourceAction: suspend (String, String) -> Unit,
             imageAction: (suspend (String, GalleryImage) -> Unit)? = null,
         ) {
+            if (galleryRefreshInFlight) {
+                return
+            }
             val sourceNames = selectedSourceNames()
             val individualImages = imageAction?.let { selectedIndividualDeleteImages() }.orEmpty()
             if (sourceNames.isEmpty() && individualImages.isEmpty()) {
                 galleryState = galleryState.copy(statusText = "Select raw or lineage-backed images")
                 return
             }
-            galleryState = galleryState.copy(loading = true, statusText = "Applying action")
             scope.launch {
-                runCatching {
-                    val token = authRepository.acquireGalleryManageToken(this@MainActivity)
-                    for (sourceName in sourceNames) {
-                        sourceAction(token, sourceName)
-                    }
-                    for (image in individualImages) {
-                        imageAction?.invoke(token, image)
-                    }
-                    val loaded = loadGalleryWithRawFallback(token, galleryState.category, galleryRepository)
-                    token to loaded
-                }.onSuccess { (token, loaded) ->
+                galleryRefreshInFlight = true
+                try {
                     galleryState =
-                        galleryState.copy(
-                            category = loaded.selectedCategory,
-                            items = loaded.response.items,
-                            selectedNames = emptySet(),
-                            loading = false,
-                            statusText = "Action complete",
-                            accessToken = token,
+                        galleryStateForRefreshStart(
+                            galleryState,
+                            galleryState.category,
+                            GalleryRefreshReason.Action,
                         )
-                }.onFailure { error ->
-                    galleryState =
-                        galleryState.copy(
-                            loading = false,
-                            statusText = "Action failed: ${error.message}",
-                        )
+                    runCatching {
+                        val token = authRepository.acquireGalleryManageToken(this@MainActivity)
+                        for (sourceName in sourceNames) {
+                            sourceAction(token, sourceName)
+                        }
+                        for (image in individualImages) {
+                            imageAction?.invoke(token, image)
+                        }
+                        val loaded = loadGalleryWithRawFallback(token, galleryState.category, galleryRepository)
+                        galleryState =
+                            galleryStateForRefreshSuccess(
+                                galleryState,
+                                token,
+                                loaded,
+                                GalleryRefreshReason.Action,
+                            )
+                    }.onFailure { error ->
+                        throwIfCancellation(error)
+                        galleryState =
+                            galleryStateForRefreshFailure(
+                                galleryState,
+                                GalleryRefreshReason.Action,
+                                error.message,
+                            )
+                    }
+                } finally {
+                    galleryRefreshInFlight = false
                 }
             }
         }
@@ -180,7 +206,32 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(currentPage) {
             if (currentPage == AppPage.Gallery && galleryState.accessToken == null) {
-                loadGallery()
+                refreshGallery(reason = GalleryRefreshReason.Initial)
+            }
+        }
+
+        LaunchedEffect(currentPage, galleryState.category, galleryState.accessToken) {
+            if (currentPage != AppPage.Gallery || galleryState.accessToken == null) {
+                return@LaunchedEffect
+            }
+            var nextDelayMs = GALLERY_POLL_INTERVAL_MS
+            while (true) {
+                delay(nextDelayMs)
+                if (galleryState.loading || galleryRefreshInFlight) {
+                    nextDelayMs = GALLERY_POLL_INTERVAL_MS
+                    continue
+                }
+                val refreshed =
+                    refreshGallery(
+                        category = galleryState.category,
+                        reason = GalleryRefreshReason.Poll,
+                    )
+                nextDelayMs =
+                    if (refreshed) {
+                        GALLERY_POLL_INTERVAL_MS
+                    } else {
+                        GALLERY_POLL_FAILURE_BACKOFF_MS
+                    }
             }
         }
 
@@ -241,8 +292,8 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(contentPadding),
                             state = galleryState,
                             repository = galleryRepository,
-                            onCategorySelected = { loadGallery(it) },
-                            onRefresh = { loadGallery() },
+                            onCategorySelected = { launchGalleryRefresh(it, GalleryRefreshReason.Category) },
+                            onRefresh = { launchGalleryRefresh(reason = GalleryRefreshReason.Manual) },
                             onToggleSelected = { image -> galleryState = toggleSelection(galleryState, image) },
                             onDeleteSelected = {
                                 runGalleryAction(
@@ -404,6 +455,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+internal enum class GalleryRefreshReason {
+    Initial,
+    Category,
+    Manual,
+    Action,
+    Poll,
+}
+
 internal data class LoadedGallery(
     val selectedCategory: GalleryCategory,
     val response: GalleryImagesResponse,
@@ -431,6 +490,87 @@ internal suspend fun loadGalleryWithRawFallback(
             scannerFallback = true,
         )
     }
+
+internal fun galleryStateForRefreshStart(
+    state: GalleryUiState,
+    category: GalleryCategory,
+    reason: GalleryRefreshReason,
+): GalleryUiState =
+    when (reason) {
+        GalleryRefreshReason.Poll -> state
+        GalleryRefreshReason.Action ->
+            state.copy(
+                loading = true,
+                statusText = "Applying action",
+            )
+        GalleryRefreshReason.Initial,
+        GalleryRefreshReason.Category,
+        GalleryRefreshReason.Manual,
+        ->
+            state.copy(
+                category = category,
+                loading = true,
+                selectedNames = emptySet(),
+                statusText = "Loading ${category.wireValue} images",
+            )
+    }
+
+internal fun galleryStateForRefreshSuccess(
+    state: GalleryUiState,
+    token: String,
+    loaded: LoadedGallery,
+    reason: GalleryRefreshReason,
+): GalleryUiState {
+    val loadedNames = loaded.response.items.map { it.name }.toSet()
+    val selectedNames =
+        if (reason == GalleryRefreshReason.Poll) {
+            state.selectedNames.intersect(loadedNames)
+        } else {
+            emptySet()
+        }
+    val statusText =
+        if (reason == GalleryRefreshReason.Action) {
+            "Action complete"
+        } else {
+            galleryStatusText(loaded)
+        }
+    return state.copy(
+        category = loaded.selectedCategory,
+        items = loaded.response.items,
+        selectedNames = selectedNames,
+        loading = false,
+        statusText = statusText,
+        accessToken = token,
+    )
+}
+
+internal fun galleryStateForRefreshFailure(
+    state: GalleryUiState,
+    reason: GalleryRefreshReason,
+    message: String?,
+): GalleryUiState =
+    when (reason) {
+        GalleryRefreshReason.Poll -> state
+        GalleryRefreshReason.Action ->
+            state.copy(
+                loading = false,
+                statusText = "Action failed: ${message ?: "unknown error"}",
+            )
+        GalleryRefreshReason.Initial,
+        GalleryRefreshReason.Category,
+        GalleryRefreshReason.Manual,
+        ->
+            state.copy(
+                loading = false,
+                statusText = "Gallery load failed: ${message ?: "unknown error"}",
+            )
+    }
+
+private fun throwIfCancellation(error: Throwable) {
+    if (error is CancellationException) {
+        throw error
+    }
+}
 
 private fun galleryStatusText(loaded: LoadedGallery): String =
     galleryStatusText(

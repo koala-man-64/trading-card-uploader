@@ -54,6 +54,13 @@ private data class GalleryPreviewLoader(
     val repository: GalleryRepository,
 )
 
+private data class GalleryPreviewCacheKey(
+    val name: String,
+    val lastModifiedUtc: String?,
+    val size: Long,
+    val accessToken: String?,
+)
+
 private data class ViewedGalleryImage(
     val image: GalleryImage,
     val bitmap: Bitmap?,
@@ -217,7 +224,8 @@ private fun GalleryImageCard(
     onToggleSelected: () -> Unit,
     onViewImage: (Bitmap?) -> Unit,
 ) {
-    var previewBitmap by remember(image.previewUrl) { mutableStateOf<Bitmap?>(null) }
+    val previewKey = galleryPreviewCacheKey(image, previewLoader.accessToken)
+    var previewBitmap by remember(previewKey) { mutableStateOf<Bitmap?>(null) }
 
     ElevatedCard(
         modifier =
@@ -279,15 +287,21 @@ private fun GalleryPreview(
     options: GalleryPreviewOptions = GalleryPreviewOptions(),
 ) {
     val accessToken = previewLoader.accessToken
-    var bitmap by remember(image.previewUrl, accessToken) { mutableStateOf(options.initialBitmap) }
-    var loading by remember(image.previewUrl, accessToken) { mutableStateOf(false) }
-    LaunchedEffect(image.previewUrl, accessToken) {
+    val previewKey = galleryPreviewCacheKey(image, accessToken)
+    var bitmap by remember(previewKey) { mutableStateOf(options.initialBitmap) }
+    var loading by remember(previewKey) { mutableStateOf(false) }
+    var attemptedPreviewUrl by remember(previewKey) { mutableStateOf<String?>(null) }
+    LaunchedEffect(previewKey, image.previewUrl) {
         if (bitmap != null) {
             loading = false
             return@LaunchedEffect
         }
+        if (attemptedPreviewUrl == image.previewUrl) {
+            return@LaunchedEffect
+        }
         bitmap = null
         loading = accessToken != null
+        attemptedPreviewUrl = image.previewUrl
         val loaded = accessToken?.let { previewLoader.repository.loadPreview(it, image) }
         bitmap = loaded
         loaded?.let(onBitmapLoaded)
@@ -317,6 +331,17 @@ private fun GalleryPreview(
         }
     }
 }
+
+private fun galleryPreviewCacheKey(
+    image: GalleryImage,
+    accessToken: String?,
+): GalleryPreviewCacheKey =
+    GalleryPreviewCacheKey(
+        name = image.name,
+        lastModifiedUtc = image.lastModifiedUtc,
+        size = image.size,
+        accessToken = accessToken,
+    )
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable

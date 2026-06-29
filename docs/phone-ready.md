@@ -94,8 +94,9 @@ adb install -r .\app-debug.apk
 3. Tap `Capture card photo` and take one test photo.
 4. Wait for the latest upload panel to show `Status: Complete`.
 5. Record the displayed client upload ID, server upload ID, and blob name.
-6. Run `phone-smoke-verify` with the client upload ID, server upload ID, blob name, and optional UTC lower bound.
-7. Confirm the workflow summary says the blob exists through RBAC, App Insights telemetry matched, and telemetry bearer/SAS marker checks are clean.
+6. Open `Gallery` and confirm the raw image appears within 5-10 seconds without tapping `Refresh`.
+7. Run `phone-smoke-verify` with the client upload ID, server upload ID, blob name, and optional UTC lower bound.
+8. Confirm the workflow summary says the blob exists through RBAC, App Insights telemetry matched, and telemetry bearer/SAS marker checks are clean.
 
 Write-only SAS behavior is proven by the Function unit tests so the app and smoke workflow do not need to expose SAS URLs.
 
