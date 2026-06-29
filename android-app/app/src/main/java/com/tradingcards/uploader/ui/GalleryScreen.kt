@@ -54,6 +54,17 @@ private data class GalleryPreviewLoader(
     val repository: GalleryRepository,
 )
 
+private data class ViewedGalleryImage(
+    val image: GalleryImage,
+    val bitmap: Bitmap?,
+)
+
+private data class GalleryPreviewOptions(
+    val contentScale: ContentScale = ContentScale.Crop,
+    val placeholder: String = "Preview",
+    val initialBitmap: Bitmap? = null,
+)
+
 @Suppress(
     "FunctionNaming",
     "LongMethod",
@@ -72,7 +83,7 @@ fun GalleryScreen(
     onReprocessSelected: () -> Unit,
 ) {
     var pendingAction by remember { mutableStateOf<PendingGalleryAction?>(null) }
-    var viewingImage by remember { mutableStateOf<GalleryImage?>(null) }
+    var viewingImage by remember { mutableStateOf<ViewedGalleryImage?>(null) }
     val previewLoader = GalleryPreviewLoader(state.accessToken, repository)
     val selectedCount = state.selectedNames.size
 
@@ -121,7 +132,9 @@ fun GalleryScreen(
                     selected = image.name in state.selectedNames,
                     previewLoader = previewLoader,
                     onToggleSelected = { onToggleSelected(image) },
-                    onViewImage = { viewingImage = image },
+                    onViewImage = { bitmap ->
+                        viewingImage = ViewedGalleryImage(image, bitmap)
+                    },
                 )
             }
         }
@@ -158,9 +171,9 @@ fun GalleryScreen(
         )
     }
 
-    viewingImage?.let { image ->
+    viewingImage?.let { selection ->
         GalleryImageViewerDialog(
-            image = image,
+            selection = selection,
             previewLoader = previewLoader,
             onDismiss = { viewingImage = null },
         )
@@ -202,8 +215,10 @@ private fun GalleryImageCard(
     selected: Boolean,
     previewLoader: GalleryPreviewLoader,
     onToggleSelected: () -> Unit,
-    onViewImage: () -> Unit,
+    onViewImage: (Bitmap?) -> Unit,
 ) {
+    var previewBitmap by remember(image.previewUrl) { mutableStateOf<Bitmap?>(null) }
+
     ElevatedCard(
         modifier =
             Modifier
@@ -214,6 +229,7 @@ private fun GalleryImageCard(
             GalleryPreview(
                 image = image,
                 previewLoader = previewLoader,
+                onBitmapLoaded = { previewBitmap = it },
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -245,7 +261,7 @@ private fun GalleryImageCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = onViewImage) {
+                TextButton(onClick = { onViewImage(previewBitmap) }) {
                     Text("View")
                 }
             }
@@ -258,17 +274,23 @@ private fun GalleryImageCard(
 private fun GalleryPreview(
     image: GalleryImage,
     previewLoader: GalleryPreviewLoader,
+    onBitmapLoaded: (Bitmap) -> Unit = {},
     modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop,
-    placeholder: String = "Preview",
+    options: GalleryPreviewOptions = GalleryPreviewOptions(),
 ) {
     val accessToken = previewLoader.accessToken
-    var bitmap by remember(image.previewUrl, accessToken) { mutableStateOf<Bitmap?>(null) }
+    var bitmap by remember(image.previewUrl, accessToken) { mutableStateOf(options.initialBitmap) }
     var loading by remember(image.previewUrl, accessToken) { mutableStateOf(false) }
     LaunchedEffect(image.previewUrl, accessToken) {
+        if (bitmap != null) {
+            loading = false
+            return@LaunchedEffect
+        }
         bitmap = null
         loading = accessToken != null
-        bitmap = accessToken?.let { previewLoader.repository.loadPreview(it, image) }
+        val loaded = accessToken?.let { previewLoader.repository.loadPreview(it, image) }
+        bitmap = loaded
+        loaded?.let(onBitmapLoaded)
         loading = false
     }
     Box(
@@ -283,13 +305,13 @@ private fun GalleryPreview(
             if (loading) {
                 CircularProgressIndicator(modifier = Modifier.size(28.dp))
             } else {
-                Text(placeholder)
+                Text(options.placeholder)
             }
         } else {
             Image(
                 bitmap = currentBitmap.asImageBitmap(),
                 contentDescription = image.name,
-                contentScale = contentScale,
+                contentScale = options.contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -299,10 +321,12 @@ private fun GalleryPreview(
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 private fun GalleryImageViewerDialog(
-    image: GalleryImage,
+    selection: ViewedGalleryImage,
     previewLoader: GalleryPreviewLoader,
     onDismiss: () -> Unit,
 ) {
+    val image = selection.image
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -337,8 +361,12 @@ private fun GalleryImageViewerDialog(
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 240.dp, max = 560.dp),
-                    contentScale = ContentScale.Fit,
-                    placeholder = "Image unavailable",
+                    options =
+                        GalleryPreviewOptions(
+                            contentScale = ContentScale.Fit,
+                            placeholder = "Image unavailable",
+                            initialBitmap = selection.bitmap,
+                        ),
                 )
                 Text(
                     image.sourceBlobName ?: image.name,
