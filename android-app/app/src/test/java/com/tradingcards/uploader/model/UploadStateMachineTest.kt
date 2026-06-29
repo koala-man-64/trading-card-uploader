@@ -27,4 +27,14 @@ class UploadStateMachineTest {
             UploadStateMachine.nextForHttpFailure(statusCode = 400, attempts = 1, maxAttempts = 5),
         )
     }
+
+    @Test
+    fun failedUploadsCanBeManuallyRequeued() {
+        UploadStateMachine.assertTransition(UploadStatus.FailedTerminal, UploadStatus.Queued)
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun completedUploadsCannotTransition() {
+        UploadStateMachine.assertTransition(UploadStatus.Complete, UploadStatus.Queued)
+    }
 }

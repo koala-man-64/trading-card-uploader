@@ -26,6 +26,9 @@ interface UploadQueueDao {
     @Query("SELECT * FROM upload_queue ORDER BY createdAtEpochMillis DESC LIMIT 1")
     fun latest(): Flow<UploadEntity?>
 
+    @Query("SELECT * FROM upload_queue ORDER BY createdAtEpochMillis DESC LIMIT 50")
+    fun recentStream(): Flow<List<UploadEntity>>
+
     @Query(
         """
         UPDATE upload_queue
