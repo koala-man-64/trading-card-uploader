@@ -66,9 +66,10 @@ object UploadStateMachine {
                     setOf(UploadStatus.Complete)
                 UploadStatus.RetryWaiting ->
                     setOf(UploadStatus.RequestingSas, UploadStatus.FailedTerminal)
-                UploadStatus.Complete,
-                UploadStatus.FailedTerminal,
-                -> emptySet()
+                // A terminal failure can only re-enter the pipeline through an explicit user retry.
+                UploadStatus.FailedTerminal ->
+                    setOf(UploadStatus.Queued)
+                UploadStatus.Complete -> emptySet()
             }
         check(to in allowed) { "Invalid upload transition: $from -> $to" }
     }

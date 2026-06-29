@@ -7,11 +7,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -41,6 +41,7 @@ import com.tradingcards.uploader.ui.CaptureScreen
 import com.tradingcards.uploader.ui.CaptureScreenActions
 import com.tradingcards.uploader.ui.GalleryScreen
 import com.tradingcards.uploader.ui.GalleryUiState
+import com.tradingcards.uploader.ui.theme.UploaderTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -53,6 +54,7 @@ private const val GALLERY_POLL_FAILURE_BACKOFF_MS = 30_000L
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         val database = UploadRepository.database(this)
         val repository = UploadRepository(this, database.uploadQueueDao())
@@ -78,12 +80,17 @@ class MainActivity : ComponentActivity() {
         authRepository: MsalAuthRepository,
     ) {
         val scope = rememberCoroutineScope()
-        val latestUpload by uploadQueueDao.latest().collectAsState(initial = null)
+        val recentUploads by uploadQueueDao.recentStream().collectAsState(initial = emptyList())
         var statusText by remember { mutableStateOf("Ready") }
+        var signedIn by remember { mutableStateOf(false) }
         var currentPage by remember { mutableStateOf(AppPage.Capture) }
         var galleryState by remember { mutableStateOf(GalleryUiState()) }
         var galleryRefreshInFlight by remember { mutableStateOf(false) }
         var pendingCapture by remember { mutableStateOf<PendingCapture?>(null) }
+
+        LaunchedEffect(Unit) {
+            runCatching { authRepository.acquireUploadTokenSilent() }.onSuccess { signedIn = true }
+        }
 
         suspend fun refreshGallery(
             category: GalleryCategory = galleryState.category,
@@ -235,7 +242,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        MaterialTheme {
+        UploaderTheme {
             Scaffold(
                 bottomBar = {
                     NavigationBar {
@@ -259,13 +266,15 @@ class MainActivity : ComponentActivity() {
                         CaptureScreen(
                             modifier = Modifier.padding(contentPadding),
                             statusText = statusText,
-                            latestUpload = latestUpload,
+                            uploads = recentUploads,
+                            signedIn = signedIn,
                             actions =
                                 CaptureScreenActions(
                                     onAuthenticate = {
                                         authenticateForUpload(
                                             scope = scope,
                                             authRepository = authRepository,
+                                            onAuthenticated = { signedIn = true },
                                             onStatusTextChanged = { statusText = it },
                                         )
                                     },
@@ -284,6 +293,12 @@ class MainActivity : ComponentActivity() {
                                         galleryPhotoLauncher.launch(
                                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                                         )
+                                    },
+                                    onRetry = { upload ->
+                                        scope.launch {
+                                            repository.retry(upload.uploadId)
+                                            statusText = "Retrying upload"
+                                        }
                                     },
                                 ),
                         )
@@ -385,11 +400,15 @@ class MainActivity : ComponentActivity() {
     private fun authenticateForUpload(
         scope: CoroutineScope,
         authRepository: MsalAuthRepository,
+        onAuthenticated: () -> Unit,
         onStatusTextChanged: (String) -> Unit,
     ) {
         scope.launch {
             runCatching { authRepository.acquireUploadToken(this@MainActivity) }
-                .onSuccess { onStatusTextChanged("Authenticated") }
+                .onSuccess {
+                    onAuthenticated()
+                    onStatusTextChanged("Authenticated")
+                }
                 .onFailure { onStatusTextChanged("Authentication failed: ${it.message}") }
         }
     }

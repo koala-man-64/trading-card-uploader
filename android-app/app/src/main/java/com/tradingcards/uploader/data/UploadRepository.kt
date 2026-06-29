@@ -12,6 +12,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.tradingcards.uploader.model.UploadEntity
+import com.tradingcards.uploader.model.UploadStateMachine
 import com.tradingcards.uploader.model.UploadStatus
 import com.tradingcards.uploader.worker.UploadWorker
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,26 @@ class UploadRepository(
                 updatedAtEpochMillis = now,
             ),
         )
+        enqueueWorker(uploadId)
+        return uploadId
+    }
+
+    /** Re-queue a previously failed upload for another attempt. No-op unless it is terminally failed. */
+    suspend fun retry(uploadId: String) {
+        val entity = dao.get(uploadId) ?: return
+        if (entity.status != UploadStatus.FailedTerminal) return
+        UploadStateMachine.assertTransition(entity.status, UploadStatus.Queued)
+        dao.updateStatus(
+            uploadId = uploadId,
+            status = UploadStatus.Queued,
+            attemptCount = 0,
+            lastError = null,
+            updatedAtEpochMillis = System.currentTimeMillis(),
+        )
+        enqueueWorker(uploadId)
+    }
+
+    private fun enqueueWorker(uploadId: String) {
         val request =
             OneTimeWorkRequestBuilder<UploadWorker>()
                 .setInputData(Data.Builder().putString(UploadWorker.KEY_UPLOAD_ID, uploadId).build())
@@ -56,7 +77,6 @@ class UploadRepository(
                 )
                 .build()
         WorkManager.getInstance(context).enqueue(request)
-        return uploadId
     }
 
     suspend fun enqueueSelectedPhoto(sourceUri: Uri): String {
