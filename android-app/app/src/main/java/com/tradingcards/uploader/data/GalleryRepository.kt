@@ -2,6 +2,8 @@ package com.tradingcards.uploader.data
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.GalleryImageDeleteRequest
@@ -11,9 +13,36 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
 import retrofit2.Response
 import java.net.URI
+
+internal const val SCANNER_NOT_CONFIGURED_CODE = "scanner_not_configured"
+
+private val galleryErrorJsonAdapter =
+    Moshi
+        .Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
+        .adapter(GalleryErrorBody::class.java)
+
+class ScannerNotConfiguredException(message: String) : IllegalStateException(message)
+
+private data class GalleryErrorBody(
+    val error: String? = null,
+    val message: String? = null,
+)
+
+private data class GalleryErrorDetail(
+    val code: String?,
+    val message: String?,
+) {
+    val displayText: String?
+        get() =
+            listOfNotNull(
+                code?.takeIf { it.isNotBlank() },
+                message?.takeIf { it.isNotBlank() },
+            ).joinToString(": ").takeIf { it.isNotBlank() }
+}
 
 class GalleryRepository(
     private val apiBaseUrl: String,
@@ -104,22 +133,28 @@ class GalleryRepository(
     private fun <T> requireBody(response: Response<T>): T {
         if (!response.isSuccessful) {
             val detail = response.errorBody()?.string()?.let(::galleryErrorDetail)
+            if (detail?.code == SCANNER_NOT_CONFIGURED_CODE) {
+                throw ScannerNotConfiguredException(
+                    detail.message ?: "Scanner gallery is not configured",
+                )
+            }
             error(
                 listOfNotNull(
                     "Gallery request failed: HTTP ${response.code()}",
-                    detail,
+                    detail?.displayText,
                 ).joinToString(": "),
             )
         }
         return response.body() ?: error("Gallery request returned an empty body")
     }
 
-    private fun galleryErrorDetail(body: String): String? =
+    private fun galleryErrorDetail(body: String): GalleryErrorDetail? =
         runCatching {
-            val json = JSONObject(body)
-            listOfNotNull(
-                json.optString("error").takeIf { it.isNotBlank() },
-                json.optString("message").takeIf { it.isNotBlank() },
-            ).joinToString(": ").takeIf { it.isNotBlank() }
+            galleryErrorJsonAdapter.fromJson(body)?.let { parsed ->
+                GalleryErrorDetail(
+                    code = parsed.error?.takeIf { it.isNotBlank() },
+                    message = parsed.message?.takeIf { it.isNotBlank() },
+                ).takeIf { it.displayText != null }
+            }
         }.getOrNull()
 }
