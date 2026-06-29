@@ -21,11 +21,9 @@ class MsalAuthRepository(private val context: Context) {
     private val uploadScopes = arrayOf(BuildConfig.UPLOAD_API_SCOPE)
     private val galleryScopes = arrayOf(BuildConfig.GALLERY_MANAGE_SCOPE)
 
-    suspend fun acquireUploadToken(activity: Activity): String =
-        acquireToken(activity, uploadScopes)
+    suspend fun acquireUploadToken(activity: Activity): String = acquireToken(activity, uploadScopes)
 
-    suspend fun acquireGalleryManageToken(activity: Activity): String =
-        acquireToken(activity, galleryScopes)
+    suspend fun acquireGalleryManageToken(activity: Activity): String = acquireToken(activity, galleryScopes)
 
     private suspend fun acquireToken(
         activity: Activity,
