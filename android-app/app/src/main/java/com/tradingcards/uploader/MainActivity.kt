@@ -396,8 +396,17 @@ private suspend fun loadGalleryWithRawFallback(
     }
 
 private fun galleryStatusText(loaded: LoadedGallery): String =
-    if (loaded.scannerFallback) {
-        "Scanner not configured; showing ${loaded.response.items.size} raw image(s)"
+    galleryStatusText(
+        itemCount = loaded.response.items.size,
+        scannerFallback = loaded.scannerFallback,
+    )
+
+internal fun galleryStatusText(
+    itemCount: Int,
+    scannerFallback: Boolean,
+): String =
+    if (scannerFallback) {
+        "Showing $itemCount raw image(s)"
     } else {
-        "${loaded.response.items.size} image(s)"
+        "$itemCount image(s)"
     }
