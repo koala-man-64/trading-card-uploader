@@ -11,13 +11,12 @@ from shared.auth import JwtValidator
 from shared.config import Settings
 from shared.gallery import (
     build_container,
-    delete_raw_blob,
+    delete_raw_source_group,
     list_raw_images,
     parse_limit,
     raw_image_bytes,
     reprocess_raw_source,
     require_gallery_admin,
-    require_raw_image_blob_name,
     scanner_gallery_images,
     scanner_json,
     scanner_request,
@@ -167,26 +166,23 @@ def admin_gallery_delete_source_group(req: func.HttpRequest) -> func.HttpRespons
         source_blob_name = str(payload.get("sourceBlobName", "")).strip()
         if not source_blob_name:
             raise Problem(400, "missing_source_blob_name", "sourceBlobName is required")
-        require_raw_image_blob_name(source_blob_name)
-        scanner_payload = scanner_json(
+        result = delete_raw_source_group(
             settings,
             authorization,
-            "POST",
-            "/api/v1/admin/gallery/actions/delete-by-source",
-            {"sourceBlobName": source_blob_name},
+            build_container(settings),
+            source_blob_name,
         )
-        raw_deleted = delete_raw_blob(build_container(settings), source_blob_name)
         logging.info(
             "Deleted admin gallery source group",
-            extra={"custom_dimensions": {"sourceBlobName": source_blob_name, "rawDeleted": raw_deleted}},
+            extra={
+                "custom_dimensions": {
+                    "sourceBlobName": source_blob_name,
+                    "rawDeleted": result["rawDeleted"],
+                    "scannerSkipped": result["scanner"].get("skipped", False),
+                }
+            },
         )
-        return _json_response(
-            {
-                "sourceBlobName": source_blob_name,
-                "rawDeleted": raw_deleted,
-                "scanner": scanner_payload,
-            }
-        )
+        return _json_response(result)
     except Problem as problem:
         logging.warning("Admin gallery delete rejected: %s", problem.code)
         return _json_response(problem.to_body(), problem.status_code)
