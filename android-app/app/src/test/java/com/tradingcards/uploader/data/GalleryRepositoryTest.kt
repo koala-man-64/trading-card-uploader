@@ -40,8 +40,7 @@ class GalleryRepositoryTest {
 
     private fun scannerNotConfiguredClient(): SasIssuerClient =
         object : SasIssuerClient {
-            override suspend fun healthz(): Response<Map<String, String>> =
-                error("healthz was not expected")
+            override suspend fun healthz(): Response<Map<String, String>> = error("healthz was not expected")
 
             override suspend fun issueUploadSas(
                 authorization: String,
@@ -70,19 +69,16 @@ class GalleryRepositoryTest {
             override suspend fun deleteGallerySourceGroup(
                 authorization: String,
                 request: GallerySourceActionRequest,
-            ): Response<GallerySourceActionResponse> =
-                error("deleteGallerySourceGroup was not expected")
+            ): Response<GallerySourceActionResponse> = error("deleteGallerySourceGroup was not expected")
 
             override suspend fun deleteGalleryImage(
                 authorization: String,
                 request: GalleryImageDeleteRequest,
-            ): Response<GalleryImageDeleteResponse> =
-                error("deleteGalleryImage was not expected")
+            ): Response<GalleryImageDeleteResponse> = error("deleteGalleryImage was not expected")
 
             override suspend fun reprocessGallerySource(
                 authorization: String,
                 request: GallerySourceActionRequest,
-            ): Response<GallerySourceActionResponse> =
-                error("reprocessGallerySource was not expected")
+            ): Response<GallerySourceActionResponse> = error("reprocessGallerySource was not expected")
         }
 }
