@@ -13,6 +13,7 @@ import androidx.core.view.WindowCompat
 internal val LocalStatusPalette =
     staticCompositionLocalOf { LightStatusPalette }
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 fun UploaderTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
