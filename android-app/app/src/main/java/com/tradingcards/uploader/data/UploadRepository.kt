@@ -1,6 +1,8 @@
 package com.tradingcards.uploader.data
 
 import android.content.Context
+import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -12,6 +14,9 @@ import androidx.work.WorkManager
 import com.tradingcards.uploader.model.UploadEntity
 import com.tradingcards.uploader.model.UploadStatus
 import com.tradingcards.uploader.worker.UploadWorker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
 
 class UploadRepository(
@@ -54,6 +59,54 @@ class UploadRepository(
         return uploadId
     }
 
+    suspend fun enqueueSelectedPhoto(sourceUri: Uri): String {
+        val selectedPhoto = copySelectedPhoto(sourceUri)
+        return runCatching {
+            enqueue(
+                localUri = selectedPhoto.uri.toString(),
+                contentLengthBytes = selectedPhoto.file.length(),
+                contentType = selectedPhoto.contentType,
+            )
+        }.onFailure {
+            selectedPhoto.file.delete()
+        }.getOrThrow()
+    }
+
+    private suspend fun copySelectedPhoto(sourceUri: Uri): PendingSelectedPhoto =
+        withContext(Dispatchers.IO) {
+            val appContext = context.applicationContext
+            val contentType =
+                supportedSelectedPhotoContentType(appContext.contentResolver.getType(sourceUri))
+                    ?: error("Choose a JPEG, HEIC, or HEIF photo")
+            val directory = File(appContext.filesDir, "captures").also { it.mkdirs() }
+            val file =
+                File.createTempFile(
+                    "gallery-",
+                    selectedPhotoFileExtension(contentType),
+                    directory,
+                )
+            runCatching {
+                appContext.contentResolver.openInputStream(sourceUri).use { input ->
+                    requireNotNull(input) { "Unable to open selected photo" }
+                    file.outputStream().use { output -> input.copyTo(output) }
+                }
+                check(file.length() > 0) { "Selected photo is empty" }
+                PendingSelectedPhoto(
+                    file = file,
+                    uri =
+                        FileProvider.getUriForFile(
+                            appContext,
+                            "${appContext.packageName}.files",
+                            file,
+                        ),
+                    contentType = contentType,
+                )
+            }.getOrElse { error ->
+                file.delete()
+                throw error
+            }
+        }
+
     companion object {
         @Volatile
         private var database: AppDatabase? = null
@@ -79,3 +132,9 @@ class UploadRepository(
             }
     }
 }
+
+private data class PendingSelectedPhoto(
+    val file: File,
+    val uri: Uri,
+    val contentType: String,
+)

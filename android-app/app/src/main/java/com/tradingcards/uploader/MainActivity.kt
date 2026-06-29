@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ import com.tradingcards.uploader.model.GalleryImagesResponse
 import com.tradingcards.uploader.model.selectedGalleryIndividualDeleteImages
 import com.tradingcards.uploader.model.selectedGallerySourceNames
 import com.tradingcards.uploader.ui.CaptureScreen
+import com.tradingcards.uploader.ui.CaptureScreenActions
 import com.tradingcards.uploader.ui.GalleryScreen
 import com.tradingcards.uploader.ui.GalleryUiState
 import kotlinx.coroutines.CoroutineScope
@@ -169,6 +171,12 @@ class MainActivity : ComponentActivity() {
                 setPendingCapture = { pendingCapture = it },
                 onStatusTextChanged = { statusText = it },
             )
+        val galleryPhotoLauncher =
+            rememberGalleryPhotoLauncher(
+                repository = repository,
+                scope = scope,
+                onStatusTextChanged = { statusText = it },
+            )
 
         LaunchedEffect(currentPage) {
             if (currentPage == AppPage.Gallery && galleryState.accessToken == null) {
@@ -201,24 +209,32 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(contentPadding),
                             statusText = statusText,
                             latestUpload = latestUpload,
-                            onAuthenticate = {
-                                authenticateForUpload(
-                                    scope = scope,
-                                    authRepository = authRepository,
-                                    onStatusTextChanged = { statusText = it },
-                                )
-                            },
-                            onCapture = {
-                                if (hasCameraPermission()) {
-                                    launchCapture(
-                                        takePictureLauncher = takePictureLauncher,
-                                        setPendingCapture = { pendingCapture = it },
-                                        onStatusTextChanged = { statusText = it },
-                                    )
-                                } else {
-                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                }
-                            },
+                            actions =
+                                CaptureScreenActions(
+                                    onAuthenticate = {
+                                        authenticateForUpload(
+                                            scope = scope,
+                                            authRepository = authRepository,
+                                            onStatusTextChanged = { statusText = it },
+                                        )
+                                    },
+                                    onCapture = {
+                                        if (hasCameraPermission()) {
+                                            launchCapture(
+                                                takePictureLauncher = takePictureLauncher,
+                                                setPendingCapture = { pendingCapture = it },
+                                                onStatusTextChanged = { statusText = it },
+                                            )
+                                        } else {
+                                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                        }
+                                    },
+                                    onSelectPhoto = {
+                                        galleryPhotoLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                        )
+                                    },
+                                ),
                         )
                     AppPage.Gallery ->
                         GalleryScreen(
@@ -250,6 +266,26 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    @Composable
+    private fun rememberGalleryPhotoLauncher(
+        repository: UploadRepository,
+        scope: CoroutineScope,
+        onStatusTextChanged: (String) -> Unit,
+    ): ActivityResultLauncher<PickVisualMediaRequest> =
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { selectedUri ->
+            if (selectedUri == null) {
+                onStatusTextChanged("Gallery selection cancelled")
+                return@rememberLauncherForActivityResult
+            }
+            scope.launch {
+                runCatching { repository.enqueueSelectedPhoto(selectedUri) }
+                    .onSuccess { uploadId -> onStatusTextChanged("Gallery photo queued: $uploadId") }
+                    .onFailure { error ->
+                        onStatusTextChanged("Gallery photo failed: ${error.message ?: "unable to queue photo"}")
+                    }
+            }
+        }
 
     @Composable
     private fun rememberTakePictureLauncher(
