@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -19,8 +20,7 @@ fun CaptureScreen(
     modifier: Modifier = Modifier,
     statusText: String,
     latestUpload: UploadEntity?,
-    onAuthenticate: () -> Unit,
-    onCapture: () -> Unit,
+    actions: CaptureScreenActions,
 ) {
     MaterialTheme {
         Column(
@@ -35,11 +35,14 @@ fun CaptureScreen(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(statusText)
-            Button(onClick = onAuthenticate) {
+            Button(onClick = actions.onAuthenticate) {
                 Text("Sign in")
             }
-            Button(onClick = onCapture) {
+            Button(onClick = actions.onCapture) {
                 Text("Capture card photo")
+            }
+            OutlinedButton(onClick = actions.onSelectPhoto) {
+                Text("Upload from Photos or gallery")
             }
             latestUpload?.let { upload ->
                 HorizontalDivider()
@@ -57,6 +60,12 @@ fun CaptureScreen(
         }
     }
 }
+
+data class CaptureScreenActions(
+    val onAuthenticate: () -> Unit,
+    val onCapture: () -> Unit,
+    val onSelectPhoto: () -> Unit,
+)
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
