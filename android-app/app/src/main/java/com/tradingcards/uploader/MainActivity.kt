@@ -348,45 +348,10 @@ class MainActivity : ComponentActivity() {
         val uri: Uri,
     )
 
-    private data class LoadedGallery(
-        val category: GalleryCategory,
-        val response: GalleryImagesResponse,
-        val scannerFallback: Boolean,
-    )
-
     private enum class AppPage {
         Capture,
         Gallery,
     }
-
-    private suspend fun loadGalleryWithRawFallback(
-        token: String,
-        category: GalleryCategory,
-        repository: GalleryRepository,
-    ): LoadedGallery =
-        try {
-            LoadedGallery(
-                category = category,
-                response = repository.list(token, category),
-                scannerFallback = false,
-            )
-        } catch (error: ScannerNotConfiguredException) {
-            if (category == GalleryCategory.Raw) {
-                throw error
-            }
-            LoadedGallery(
-                category = GalleryCategory.Raw,
-                response = repository.list(token, GalleryCategory.Raw),
-                scannerFallback = true,
-            )
-        }
-
-    private fun galleryStatusText(loaded: LoadedGallery): String =
-        if (loaded.scannerFallback) {
-            "Scanner not configured; showing ${loaded.response.items.size} raw image(s)"
-        } else {
-            "${loaded.response.items.size} image(s)"
-        }
 
     private fun toggleSelection(
         state: GalleryUiState,
@@ -401,3 +366,38 @@ class MainActivity : ComponentActivity() {
         return state.copy(selectedNames = selected)
     }
 }
+
+private data class LoadedGallery(
+    val category: GalleryCategory,
+    val response: GalleryImagesResponse,
+    val scannerFallback: Boolean,
+)
+
+private suspend fun loadGalleryWithRawFallback(
+    token: String,
+    category: GalleryCategory,
+    repository: GalleryRepository,
+): LoadedGallery =
+    try {
+        LoadedGallery(
+            category = category,
+            response = repository.list(token, category),
+            scannerFallback = false,
+        )
+    } catch (error: ScannerNotConfiguredException) {
+        if (category == GalleryCategory.Raw) {
+            throw error
+        }
+        LoadedGallery(
+            category = GalleryCategory.Raw,
+            response = repository.list(token, GalleryCategory.Raw),
+            scannerFallback = true,
+        )
+    }
+
+private fun galleryStatusText(loaded: LoadedGallery): String =
+    if (loaded.scannerFallback) {
+        "Scanner not configured; showing ${loaded.response.items.size} raw image(s)"
+    } else {
+        "${loaded.response.items.size} image(s)"
+    }
