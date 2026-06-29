@@ -382,6 +382,7 @@ if ([string]::IsNullOrWhiteSpace($ApiAppIdUri)) {
 
 $existingScopes = @($apiApp.api.oauth2PermissionScopes)
 $uploadScope = $existingScopes | Where-Object { $_.value -eq "upload.write" } | Select-Object -First 1
+$galleryScope = $existingScopes | Where-Object { $_.value -eq "gallery.manage" } | Select-Object -First 1
 if (-not $uploadScope) {
     $uploadScope = [pscustomobject]@{
         adminConsentDescription = "Allow the application to upload trading card photos."
@@ -394,7 +395,23 @@ if (-not $uploadScope) {
         value = "upload.write"
     }
 }
-$scopes = @($existingScopes | Where-Object { $_.value -ne "upload.write" }) + @($uploadScope)
+if (-not $galleryScope) {
+    $galleryScope = [pscustomobject]@{
+        adminConsentDescription = "Allow the application to manage trading card gallery images."
+        adminConsentDisplayName = "Manage trading card gallery"
+        id = ([guid]::NewGuid()).ToString()
+        isEnabled = $true
+        type = "User"
+        userConsentDescription = "Manage trading card gallery images."
+        userConsentDisplayName = "Manage trading card gallery"
+        value = "gallery.manage"
+    }
+}
+$scopes = @(
+    $existingScopes | Where-Object { $_.value -notin @("upload.write", "gallery.manage") }
+    $uploadScope
+    $galleryScope
+)
 Invoke-GraphPatch -ApplicationObjectId $apiApp.id -TargetName $ApiAppDisplayName -Body @{
     identifierUris = @($ApiAppIdUri)
     api = @{
@@ -404,6 +421,7 @@ Invoke-GraphPatch -ApplicationObjectId $apiApp.id -TargetName $ApiAppDisplayName
 }
 $apiApp = Get-AppByClientId -ClientId $ApiClientId
 $uploadScope = @($apiApp.api.oauth2PermissionScopes) | Where-Object { $_.value -eq "upload.write" } | Select-Object -First 1
+$galleryScope = @($apiApp.api.oauth2PermissionScopes) | Where-Object { $_.value -eq "gallery.manage" } | Select-Object -First 1
 Ensure-ServicePrincipal -ClientId $ApiClientId | Out-Null
 
 $androidApp = Ensure-AppRegistration -DisplayName $AndroidAppDisplayName -ClientId $AndroidClientId -PublicClient
@@ -420,6 +438,10 @@ Invoke-GraphPatch -ApplicationObjectId $androidApp.id -TargetName $AndroidAppDis
             resourceAccess = @(
                 @{
                     id = $uploadScope.id
+                    type = "Scope"
+                },
+                @{
+                    id = $galleryScope.id
                     type = "Scope"
                 }
             )
@@ -496,6 +518,7 @@ $variables = [ordered]@{
     ANDROID_CLIENT_ID = $AndroidClientId
     ANDROID_TENANT_ID = $TenantId
     ANDROID_API_SCOPE = "$ApiAppIdUri/upload.write"
+    ANDROID_GALLERY_MANAGE_SCOPE = "$ApiAppIdUri/gallery.manage"
     ANDROID_MSAL_SIGNATURE_HASH = $signatureHash
     SMOKE_PRINCIPAL_ID = $githubSp.id
 }

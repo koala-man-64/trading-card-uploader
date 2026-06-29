@@ -18,19 +18,56 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class MsalAuthRepository(private val context: Context) {
-    private val scopes = arrayOf(BuildConfig.API_SCOPE)
+    private val uploadScopes = arrayOf(BuildConfig.UPLOAD_API_SCOPE)
+    private val galleryScopes = arrayOf(BuildConfig.GALLERY_MANAGE_SCOPE)
 
-    suspend fun signIn(activity: Activity): String {
+    suspend fun acquireUploadToken(activity: Activity): String = acquireToken(activity, uploadScopes)
+
+    suspend fun acquireGalleryManageToken(activity: Activity): String = acquireToken(activity, galleryScopes)
+
+    private suspend fun acquireToken(
+        activity: Activity,
+        scopes: Array<String>,
+    ): String {
         val app = application()
         existingAccount(app)?.let {
-            return acquireTokenSilent(app)
+            return runCatching { acquireTokenSilent(app, scopes) }
+                .getOrElse { interactiveAcquireToken(app, activity, scopes) }
         }
-        return interactiveSignIn(app, activity)
+        return interactiveSignIn(app, activity, scopes)
     }
+
+    private suspend fun interactiveAcquireToken(
+        app: IPublicClientApplication,
+        activity: Activity,
+        scopes: Array<String>,
+    ): String =
+        suspendCancellableCoroutine { continuation ->
+            app.acquireToken(
+                activity,
+                scopes,
+                object : AuthenticationCallback {
+                    override fun onSuccess(authenticationResult: IAuthenticationResult) {
+                        continuation.resume(authenticationResult.accessToken)
+                    }
+
+                    override fun onError(exception: MsalException) {
+                        continuation.resumeWithException(exception)
+                    }
+
+                    override fun onCancel() {
+                        continuation.resumeWithException(
+                            IllegalStateException("MSAL token request cancelled"),
+                        )
+                    }
+                },
+            )
+        }
 
     private suspend fun interactiveSignIn(
         app: ISingleAccountPublicClientApplication,
         activity: Activity,
+        scopes: Array<String>,
     ): String =
         suspendCancellableCoroutine { continuation ->
             app.signIn(
@@ -47,19 +84,24 @@ class MsalAuthRepository(private val context: Context) {
                     }
 
                     override fun onCancel() {
-                        continuation.resumeWithException(IllegalStateException("MSAL sign-in cancelled"))
+                        continuation.resumeWithException(
+                            IllegalStateException("MSAL sign-in cancelled"),
+                        )
                     }
                 },
             )
         }
 
-    suspend fun acquireTokenSilent(): String {
+    suspend fun acquireUploadTokenSilent(): String {
         val app = application()
-        currentAccount(app)
-        return acquireTokenSilent(app)
+        existingAccount(app) ?: error("No signed-in account is available")
+        return acquireTokenSilent(app, uploadScopes)
     }
 
-    private suspend fun acquireTokenSilent(app: ISingleAccountPublicClientApplication): String =
+    private suspend fun acquireTokenSilent(
+        app: ISingleAccountPublicClientApplication,
+        scopes: Array<String>,
+    ): String =
         suspendCancellableCoroutine { continuation ->
             app.acquireTokenSilentAsync(
                 scopes,
@@ -90,10 +132,6 @@ class MsalAuthRepository(private val context: Context) {
                 .getString("tenant_id")
         return "https://login.microsoftonline.com/$tenantId"
     }
-
-    private suspend fun currentAccount(app: ISingleAccountPublicClientApplication): IAccount =
-        existingAccount(app)
-            ?: error("No signed-in account is available")
 
     private suspend fun existingAccount(app: ISingleAccountPublicClientApplication): IAccount? =
         suspendCancellableCoroutine { continuation ->

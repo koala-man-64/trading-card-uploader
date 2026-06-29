@@ -27,11 +27,21 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val apiBaseUrl = providers.gradleProperty("apiBaseUrl").orElse("http://10.0.2.2:7071/api/")
+        val apiBaseUrl =
+            providers.gradleProperty("apiBaseUrl").orElse("http://10.0.2.2:7071/api/")
         buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl.get()}\"")
-        val apiScope = providers.gradleProperty("apiScope").orElse("api://replace-with-api-client-id/upload.write")
-        buildConfigField("String", "API_SCOPE", "\"${apiScope.get()}\"")
-        val msalRedirectPath = providers.gradleProperty("msalRedirectPath").orElse("PLACEHOLDER_SIGNATURE_HASH")
+        val uploadApiScope =
+            providers.gradleProperty("uploadApiScope").orElse(
+                providers.gradleProperty("apiScope").orElse("api://replace-with-api-client-id/upload.write"),
+            )
+        buildConfigField("String", "UPLOAD_API_SCOPE", "\"${uploadApiScope.get()}\"")
+        val galleryManageScope =
+            providers
+                .gradleProperty("galleryManageScope")
+                .orElse("api://replace-with-api-client-id/gallery.manage")
+        buildConfigField("String", "GALLERY_MANAGE_SCOPE", "\"${galleryManageScope.get()}\"")
+        val msalRedirectPath =
+            providers.gradleProperty("msalRedirectPath").orElse("PLACEHOLDER_SIGNATURE_HASH")
         manifestPlaceholders["msalRedirectPath"] = msalRedirectPath.get()
     }
 
@@ -78,6 +88,7 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$cameraVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraVersion")
     implementation("androidx.camera:camera-view:$cameraVersion")
+    implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -109,7 +120,8 @@ tasks.register("validatePhoneBuildConfig") {
         val requiredProperties =
             listOf(
                 "apiBaseUrl",
-                "apiScope",
+                "uploadApiScope",
+                "galleryManageScope",
                 "msalRedirectPath",
                 "msalClientId",
                 "msalTenantId",
@@ -147,8 +159,11 @@ tasks.register("validatePhoneBuildConfig") {
         if (!apiBaseUrl.endsWith("/api/")) {
             throw GradleException("apiBaseUrl must end with /api/")
         }
-        if (!values.getValue("apiScope").endsWith("/upload.write")) {
-            throw GradleException("apiScope must end with /upload.write")
+        if (!values.getValue("uploadApiScope").endsWith("/upload.write")) {
+            throw GradleException("uploadApiScope must end with /upload.write")
+        }
+        if (!values.getValue("galleryManageScope").endsWith("/gallery.manage")) {
+            throw GradleException("galleryManageScope must end with /gallery.manage")
         }
         if (!file(values.getValue("devSigningStoreFile")).isFile) {
             throw GradleException("devSigningStoreFile does not exist")

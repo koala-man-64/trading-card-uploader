@@ -16,15 +16,16 @@ import com.tradingcards.uploader.model.UploadEntity
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 fun CaptureScreen(
+    modifier: Modifier = Modifier,
     statusText: String,
     latestUpload: UploadEntity?,
-    onSignIn: () -> Unit,
+    onAuthenticate: () -> Unit,
     onCapture: () -> Unit,
 ) {
     MaterialTheme {
         Column(
             modifier =
-                Modifier
+                modifier
                     .fillMaxSize()
                     .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -34,7 +35,7 @@ fun CaptureScreen(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(statusText)
-            Button(onClick = onSignIn) {
+            Button(onClick = onAuthenticate) {
                 Text("Sign in")
             }
             Button(onClick = onCapture) {

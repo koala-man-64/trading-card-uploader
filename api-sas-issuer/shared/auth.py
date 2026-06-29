@@ -40,7 +40,6 @@ class JwtValidator:
             raise Problem(401, "invalid_token", "Access token validation failed") from exc
 
         claims = self._claims_from_decoded(decoded)
-        claims.require_scope(self._settings.required_scope)
         if (
             self._settings.allowed_android_client_ids
             and claims.authorized_party not in self._settings.allowed_android_client_ids
@@ -53,6 +52,7 @@ class JwtValidator:
         object_id = str(decoded.get("oid", "")).strip()
         audience = str(decoded.get("aud", "")).strip()
         scopes = frozenset(str(decoded.get("scp", "")).split())
+        roles = frozenset(str(role) for role in decoded.get("roles", []) if str(role).strip())
         authorized_party = decoded.get("azp") or decoded.get("appid")
         if tenant_id != self._settings.entra_tenant_id:
             raise Problem(401, "wrong_tenant", "Access token tenant is not allowed")
@@ -64,4 +64,5 @@ class JwtValidator:
             audience=audience,
             authorized_party=str(authorized_party) if authorized_party else None,
             scopes=scopes,
+            roles=roles,
         )

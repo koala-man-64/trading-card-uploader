@@ -47,6 +47,70 @@ data class SasResponse(
     val maxContentLengthBytes: Long,
 )
 
+enum class GalleryCategory(val wireValue: String) {
+    Raw("raw"),
+    Processed("processed"),
+    Segmented("segmented"),
+}
+
+data class GalleryImage(
+    val category: String,
+    val name: String,
+    val sourceBlobName: String?,
+    val size: Long,
+    val lastModifiedUtc: String?,
+    val previewUrl: String,
+    val canCascade: Boolean,
+)
+
+data class GalleryImagesResponse(
+    val category: String,
+    val items: List<GalleryImage>,
+    val nextCursor: String?,
+)
+
+data class GallerySourceActionRequest(
+    val sourceBlobName: String,
+)
+
+data class GallerySourceActionResponse(
+    val sourceBlobName: String,
+)
+
+data class GalleryImageDeleteRequest(
+    val category: String,
+    val name: String,
+)
+
+data class GalleryImageDeleteResponse(
+    val category: String,
+    val name: String,
+    val deleted: Boolean,
+)
+
+fun selectedGallerySourceNames(
+    items: List<GalleryImage>,
+    selectedNames: Set<String>,
+): List<String> =
+    items
+        .filter { it.name in selectedNames }
+        .mapNotNull { image ->
+            image.sourceBlobName
+                ?: image.name.takeIf { image.category == GalleryCategory.Raw.wireValue }
+        }
+        .distinct()
+
+fun selectedGalleryIndividualDeleteImages(
+    items: List<GalleryImage>,
+    selectedNames: Set<String>,
+): List<GalleryImage> =
+    items
+        .filter { image ->
+            image.name in selectedNames &&
+                image.category != GalleryCategory.Raw.wireValue &&
+                image.sourceBlobName == null
+        }.distinctBy { it.name }
+
 class UploadStatusConverter {
     @TypeConverter
     fun fromStatus(status: UploadStatus): String = status.name

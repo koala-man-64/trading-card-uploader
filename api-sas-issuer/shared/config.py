@@ -38,6 +38,11 @@ class Settings:
     storage_connection_string: str | None
     managed_identity_client_id: str | None
     storage_api_version: str
+    gallery_manage_scope: str = "gallery.manage"
+    admin_allowed_object_ids: tuple[str, ...] = ()
+    admin_allowed_roles: tuple[str, ...] = ("Gallery.Admin",)
+    scanner_admin_base_url: str = ""
+    scanner_timeout_seconds: int = 10
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -69,6 +74,11 @@ class Settings:
                 "AZURE_STORAGE_API_VERSION",
                 DEFAULT_AZURE_STORAGE_API_VERSION,
             ).strip(),
+            gallery_manage_scope=os.getenv("GALLERY_MANAGE_SCOPE", "gallery.manage").strip(),
+            admin_allowed_object_ids=_csv(os.getenv("ADMIN_ALLOWED_OBJECT_IDS")),
+            admin_allowed_roles=_csv(os.getenv("ADMIN_ALLOWED_ROLES")) or ("Gallery.Admin",),
+            scanner_admin_base_url=os.getenv("SCANNER_ADMIN_BASE_URL", "").strip().rstrip("/"),
+            scanner_timeout_seconds=_int_env("SCANNER_TIMEOUT_SECONDS", 10),
         )
         settings.validate()
         return settings
@@ -90,6 +100,8 @@ class Settings:
             raise ValueError("MAX_UPLOAD_BYTES must be positive")
         if self.sas_ttl_minutes <= 0 or self.sas_ttl_minutes > 15:
             raise ValueError("SAS_TTL_MINUTES must be between 1 and 15")
+        if self.scanner_timeout_seconds <= 0 or self.scanner_timeout_seconds > 60:
+            raise ValueError("SCANNER_TIMEOUT_SECONDS must be between 1 and 60")
         if self.sas_signer_mode not in {"managed_identity", "connection_string"}:
             raise ValueError("SAS_SIGNER_MODE must be managed_identity or connection_string")
         if self.sas_signer_mode == "connection_string" and not self.storage_connection_string:

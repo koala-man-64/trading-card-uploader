@@ -30,10 +30,18 @@ class Claims:
     audience: str
     authorized_party: str | None
     scopes: frozenset[str]
+    roles: frozenset[str] = frozenset()
 
     def require_scope(self, scope: str) -> None:
         if scope not in self.scopes:
             raise Problem(403, "missing_scope", f"Required scope is missing: {scope}")
+
+    def require_admin(self, allowed_object_ids: tuple[str, ...], allowed_roles: tuple[str, ...]) -> None:
+        if not allowed_object_ids and not allowed_roles:
+            raise Problem(500, "admin_authorization_not_configured", "Admin gallery authorization is not configured")
+        if self.object_id in allowed_object_ids or self.roles.intersection(allowed_roles):
+            return
+        raise Problem(403, "admin_not_allowed", "Principal is not allowed to manage gallery images")
 
 
 @dataclass(frozen=True)

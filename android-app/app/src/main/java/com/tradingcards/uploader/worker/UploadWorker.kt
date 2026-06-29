@@ -51,7 +51,7 @@ class UploadWorker(
                 null,
                 System.currentTimeMillis(),
             )
-            val token = MsalAuthRepository(applicationContext).acquireTokenSilent()
+            val token = MsalAuthRepository(applicationContext).acquireUploadTokenSilent()
             val sasResponse =
                 SasIssuerClient.create(BuildConfig.API_BASE_URL).issueUploadSas(
                     authorization = "Bearer $token",
