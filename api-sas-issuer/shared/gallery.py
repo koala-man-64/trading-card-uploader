@@ -203,6 +203,31 @@ def delete_raw_blob(container: ContainerClient, blob_name: str) -> bool:
         return False
 
 
+def delete_raw_source_group(
+    settings: Settings,
+    authorization: str,
+    container: ContainerClient,
+    source_blob_name: str,
+) -> dict[str, Any]:
+    require_raw_image_blob_name(source_blob_name)
+    if settings.scanner_admin_base_url:
+        scanner_payload = scanner_json(
+            settings,
+            authorization,
+            "POST",
+            "/api/v1/admin/gallery/actions/delete-by-source",
+            {"sourceBlobName": source_blob_name},
+        )
+    else:
+        scanner_payload = {"skipped": True, "reason": "scanner_not_configured"}
+    raw_deleted = delete_raw_blob(container, source_blob_name)
+    return {
+        "sourceBlobName": source_blob_name,
+        "rawDeleted": raw_deleted,
+        "scanner": scanner_payload,
+    }
+
+
 def raw_image_bytes(container: ContainerClient, blob_name: str) -> bytes:
     require_raw_image_blob_name(blob_name)
     try:
