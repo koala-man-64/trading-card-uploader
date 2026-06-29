@@ -28,10 +28,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.tradingcards.uploader.auth.MsalAuthRepository
 import com.tradingcards.uploader.data.GalleryRepository
+import com.tradingcards.uploader.data.ScannerNotConfiguredException
 import com.tradingcards.uploader.data.UploadQueueDao
 import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
+import com.tradingcards.uploader.model.GalleryImagesResponse
 import com.tradingcards.uploader.model.selectedGalleryIndividualDeleteImages
 import com.tradingcards.uploader.model.selectedGallerySourceNames
 import com.tradingcards.uploader.ui.CaptureScreen
@@ -86,15 +88,15 @@ class MainActivity : ComponentActivity() {
             scope.launch {
                 runCatching {
                     val token = authRepository.acquireGalleryManageToken(this@MainActivity)
-                    val response = galleryRepository.list(token, category)
-                    token to response
-                }.onSuccess { (token, response) ->
+                    val loaded = loadGalleryWithRawFallback(token, category, galleryRepository)
+                    token to loaded
+                }.onSuccess { (token, loaded) ->
                     galleryState =
                         galleryState.copy(
-                            category = category,
-                            items = response.items,
+                            category = loaded.category,
+                            items = loaded.response.items,
                             loading = false,
-                            statusText = "${response.items.size} image(s)",
+                            statusText = galleryStatusText(loaded),
                             accessToken = token,
                         )
                 }.onFailure { error ->
@@ -346,10 +348,45 @@ class MainActivity : ComponentActivity() {
         val uri: Uri,
     )
 
+    private data class LoadedGallery(
+        val category: GalleryCategory,
+        val response: GalleryImagesResponse,
+        val scannerFallback: Boolean,
+    )
+
     private enum class AppPage {
         Capture,
         Gallery,
     }
+
+    private suspend fun loadGalleryWithRawFallback(
+        token: String,
+        category: GalleryCategory,
+        repository: GalleryRepository,
+    ): LoadedGallery =
+        try {
+            LoadedGallery(
+                category = category,
+                response = repository.list(token, category),
+                scannerFallback = false,
+            )
+        } catch (error: ScannerNotConfiguredException) {
+            if (category == GalleryCategory.Raw) {
+                throw error
+            }
+            LoadedGallery(
+                category = GalleryCategory.Raw,
+                response = repository.list(token, GalleryCategory.Raw),
+                scannerFallback = true,
+            )
+        }
+
+    private fun galleryStatusText(loaded: LoadedGallery): String =
+        if (loaded.scannerFallback) {
+            "Scanner not configured; showing ${loaded.response.items.size} raw image(s)"
+        } else {
+            "${loaded.response.items.size} image(s)"
+        }
 
     private fun toggleSelection(
         state: GalleryUiState,
