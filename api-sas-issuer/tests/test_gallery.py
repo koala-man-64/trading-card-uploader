@@ -60,13 +60,19 @@ def settings() -> Settings:
     )
 
 
-def claims(*, scopes: frozenset[str], oid: str = "admin-user") -> Claims:
+def claims(
+    *,
+    scopes: frozenset[str],
+    oid: str = "admin-user",
+    roles: frozenset[str] = frozenset(),
+) -> Claims:
     return Claims(
         tenant_id="tenant",
         object_id=oid,
         audience="api://api-client",
         authorized_party="android-client",
         scopes=scopes,
+        roles=roles,
     )
 
 
@@ -79,6 +85,17 @@ def test_require_gallery_admin_rejects_missing_scope() -> None:
 
 def test_require_gallery_admin_accepts_allowed_object_id() -> None:
     require_gallery_admin(settings(), claims(scopes=frozenset({"gallery.manage"})))
+
+
+def test_require_gallery_admin_accepts_allowed_role() -> None:
+    require_gallery_admin(
+        settings(),
+        claims(
+            scopes=frozenset({"gallery.manage"}),
+            oid="role-user",
+            roles=frozenset({"Gallery.Admin"}),
+        ),
+    )
 
 
 def test_require_raw_image_blob_name_rejects_non_raw_targets() -> None:

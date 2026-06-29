@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import retrofit2.Response
 import java.net.URI
 
@@ -102,8 +103,23 @@ class GalleryRepository(
 
     private fun <T> requireBody(response: Response<T>): T {
         if (!response.isSuccessful) {
-            error("Gallery request failed: HTTP ${response.code()}")
+            val detail = response.errorBody()?.string()?.let(::galleryErrorDetail)
+            error(
+                listOfNotNull(
+                    "Gallery request failed: HTTP ${response.code()}",
+                    detail,
+                ).joinToString(": "),
+            )
         }
         return response.body() ?: error("Gallery request returned an empty body")
     }
+
+    private fun galleryErrorDetail(body: String): String? =
+        runCatching {
+            val json = JSONObject(body)
+            listOfNotNull(
+                json.optString("error").takeIf { it.isNotBlank() },
+                json.optString("message").takeIf { it.isNotBlank() },
+            ).joinToString(": ").takeIf { it.isNotBlank() }
+        }.getOrNull()
 }
