@@ -96,7 +96,7 @@ class MsalAuthRepository(private val context: Context) {
 
     suspend fun acquireUploadTokenSilent(): String {
         val app = application()
-        currentAccount(app)
+        existingAccount(app) ?: error("No signed-in account is available")
         return acquireTokenSilent(app, uploadScopes)
     }
 
@@ -134,10 +134,6 @@ class MsalAuthRepository(private val context: Context) {
                 .getString("tenant_id")
         return "https://login.microsoftonline.com/$tenantId"
     }
-
-    private suspend fun currentAccount(app: ISingleAccountPublicClientApplication): IAccount =
-        existingAccount(app)
-            ?: error("No signed-in account is available")
 
     private suspend fun existingAccount(app: ISingleAccountPublicClientApplication): IAccount? =
         suspendCancellableCoroutine { continuation ->
