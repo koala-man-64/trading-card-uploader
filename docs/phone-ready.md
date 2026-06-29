@@ -9,6 +9,7 @@ Configure Entra before building the phone APK:
 - API app registration exposes `upload.write` and `gallery.manage` at the API app ID URI.
 - Android public client registration uses package `com.tradingcards.uploader`.
 - Android redirect URI is `msauth://com.tradingcards.uploader/<dev-signature-hash>`.
+- Dev gallery administrators are listed in `ADMIN_ALLOWED_OBJECT_IDS`.
 - GitHub Azure OIDC app has a federated credential for the `dev` environment.
 
 The repo-provided setup script can create or update those dev registrations, generate or reuse a stable ignored dev signing keystore, compute the MSAL signature hash, create the GitHub `dev` environment, and write the known GitHub environment values:
@@ -20,7 +21,7 @@ The repo-provided setup script can create or update those dev registrations, gen
   -AssignAzureRoles
 ```
 
-The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere. `SMOKE_PRINCIPAL_ID` is that same service principal object ID, and dev infra grants it the host-storage package-publish role plus smoke-verification reader roles. The Function App uses a system-assigned identity for package reads and the user-assigned identity for SAS/storage operations.
+The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. If `-AdminAllowedObjectIds` is omitted while running as a user, the script stores the signed-in user's object ID in `ADMIN_ALLOWED_OBJECT_IDS`; pass explicit object IDs to use a different dev admin allow-list. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere. `SMOKE_PRINCIPAL_ID` is that same service principal object ID, and dev infra grants it the host-storage package-publish role plus smoke-verification reader roles. The Function App uses a system-assigned identity for package reads and the user-assigned identity for SAS/storage operations.
 
 Configure the GitHub `dev` environment:
 
@@ -38,6 +39,7 @@ Variables:
 - `ANDROID_API_SCOPE`
 - `ANDROID_GALLERY_MANAGE_SCOPE`
 - `ANDROID_MSAL_SIGNATURE_HASH`
+- `ADMIN_ALLOWED_OBJECT_IDS`
 - `FUNCTION_APP_NAME`
 - `SMOKE_PRINCIPAL_ID`
 - `UPLOAD_STORAGE_ACCOUNT_NAME`
@@ -99,6 +101,7 @@ Write-only SAS behavior is proven by the Function unit tests so the app and smok
 
 - If sign-in fails, verify `ANDROID_CLIENT_ID`, `ANDROID_TENANT_ID`, and the Entra redirect URI for the dev signing hash.
 - If SAS issuance returns 401 or 403, verify `ANDROID_API_SCOPE`, API app consent, and `ALLOWED_ANDROID_CLIENT_IDS`.
+- If gallery load returns `admin_not_allowed` or HTTP 403, verify `ADMIN_ALLOWED_OBJECT_IDS` contains the signed-in user's Entra object ID, then redeploy dev infra and the Function App.
 - If the app stays in retry or failed state, inspect the displayed last error and correlate with Function/App Insights traces by upload ID.
 - If `phone-apk` fails validation, replace the placeholder or missing GitHub environment value named in the workflow log.
 - If `phone-apk` reports a signing hash mismatch, rerun `Initialize-DevPhoneEnvironment.ps1` with the same `.local/phone-dev/` keystore or update the Entra Android redirect URI to the current hash.

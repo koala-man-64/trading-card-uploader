@@ -19,6 +19,7 @@ param(
     [string]$KeyAlias = "upload-dev",
     [string]$DevKeystorePassword,
     [string]$DevKeyPassword,
+    [string[]]$AdminAllowedObjectIds = @(),
     [switch]$GrantAdminConsent,
     [switch]$AssignAzureRoles
 )
@@ -360,6 +361,30 @@ function Ensure-RoleAssignment {
     }
 }
 
+function Get-SignedInUserObjectId {
+    $output = & az ad signed-in-user show --query id --output tsv 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $null
+    }
+    $objectId = ($output | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($objectId)) {
+        return $null
+    }
+    return $objectId
+}
+
+function Normalize-ObjectIds {
+    param([string[]]$ObjectIds)
+
+    return @(
+        $ObjectIds |
+            ForEach-Object { $_ -split "," } |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -Unique
+    )
+}
+
 Get-Command az -ErrorAction Stop | Out-Null
 Get-Command gh -ErrorAction Stop | Out-Null
 
@@ -369,6 +394,13 @@ if ([string]::IsNullOrWhiteSpace($TenantId)) {
 }
 if ([string]::IsNullOrWhiteSpace($SubscriptionId)) {
     $SubscriptionId = $account.id
+}
+$AdminAllowedObjectIds = @(Normalize-ObjectIds -ObjectIds $AdminAllowedObjectIds)
+if ($AdminAllowedObjectIds.Count -eq 0 -and [string]$account.user.type -eq "user") {
+    $signedInUserObjectId = Get-SignedInUserObjectId
+    if (-not [string]::IsNullOrWhiteSpace($signedInUserObjectId)) {
+        $AdminAllowedObjectIds = @($signedInUserObjectId)
+    }
 }
 
 $keystore = Ensure-DevKeystore -Path $KeystorePath -MetadataPath $KeystoreMetadataPath -Alias $KeyAlias -StorePassword $DevKeystorePassword -KeyPassword $DevKeyPassword
@@ -521,6 +553,9 @@ $variables = [ordered]@{
     ANDROID_GALLERY_MANAGE_SCOPE = "$ApiAppIdUri/gallery.manage"
     ANDROID_MSAL_SIGNATURE_HASH = $signatureHash
     SMOKE_PRINCIPAL_ID = $githubSp.id
+}
+if ($AdminAllowedObjectIds.Count -gt 0) {
+    $variables["ADMIN_ALLOWED_OBJECT_IDS"] = $AdminAllowedObjectIds -join ","
 }
 foreach ($entry in $variables.GetEnumerator()) {
     Update-GitHubEnvironmentVariable -Name $entry.Key -Value $entry.Value

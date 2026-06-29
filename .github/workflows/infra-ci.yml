@@ -45,7 +45,18 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: What-if dev deployment
+        env:
+          ADMIN_ALLOWED_OBJECT_IDS: ${{ vars.ADMIN_ALLOWED_OBJECT_IDS }}
         run: |
+          admin_allowed_object_ids="$(python3 - <<'PY'
+          import json
+          import os
+
+          raw = os.environ.get("ADMIN_ALLOWED_OBJECT_IDS", "")
+          values = [part.strip() for part in raw.replace("\n", ",").split(",") if part.strip()]
+          print(json.dumps(values))
+          PY
+          )"
           az deployment group what-if \
             --name trading-card-uploader-dev \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
@@ -56,6 +67,7 @@ jobs:
               apiClientId="${{ vars.API_CLIENT_ID }}" \
               apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
               allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]' \
+              adminAllowedObjectIds="$admin_allowed_object_ids" \
               githubSmokePrincipalId="${{ vars.SMOKE_PRINCIPAL_ID }}"
 
   deploy-dev:
@@ -72,7 +84,18 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Deploy dev infrastructure
+        env:
+          ADMIN_ALLOWED_OBJECT_IDS: ${{ vars.ADMIN_ALLOWED_OBJECT_IDS }}
         run: |
+          admin_allowed_object_ids="$(python3 - <<'PY'
+          import json
+          import os
+
+          raw = os.environ.get("ADMIN_ALLOWED_OBJECT_IDS", "")
+          values = [part.strip() for part in raw.replace("\n", ",").split(",") if part.strip()]
+          print(json.dumps(values))
+          PY
+          )"
           az deployment group create \
             --name trading-card-uploader-dev \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
@@ -83,6 +106,7 @@ jobs:
               apiClientId="${{ vars.API_CLIENT_ID }}" \
               apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
               allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]' \
+              adminAllowedObjectIds="$admin_allowed_object_ids" \
               githubSmokePrincipalId="${{ vars.SMOKE_PRINCIPAL_ID }}" \
             > dev-deployment.json
       - name: Export dev deployment outputs
