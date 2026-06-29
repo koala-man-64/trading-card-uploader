@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -22,6 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,6 +39,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
@@ -63,6 +67,7 @@ fun GalleryScreen(
     onReprocessSelected: () -> Unit,
 ) {
     var pendingAction by remember { mutableStateOf<PendingGalleryAction?>(null) }
+    var viewingImage by remember { mutableStateOf<GalleryImage?>(null) }
     val selectedCount = state.selectedNames.size
 
     Column(
@@ -111,6 +116,7 @@ fun GalleryScreen(
                     accessToken = state.accessToken,
                     repository = repository,
                     onToggleSelected = { onToggleSelected(image) },
+                    onViewImage = { viewingImage = image },
                 )
             }
         }
@@ -144,6 +150,15 @@ fun GalleryScreen(
                     Text("Cancel")
                 }
             },
+        )
+    }
+
+    viewingImage?.let { image ->
+        GalleryImageViewerDialog(
+            image = image,
+            accessToken = state.accessToken,
+            repository = repository,
+            onDismiss = { viewingImage = null },
         )
     }
 }
@@ -184,6 +199,7 @@ private fun GalleryImageCard(
     accessToken: String?,
     repository: GalleryRepository,
     onToggleSelected: () -> Unit,
+    onViewImage: () -> Unit,
 ) {
     ElevatedCard(
         modifier =
@@ -223,6 +239,14 @@ private fun GalleryImageCard(
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onViewImage) {
+                    Text("View")
+                }
+            }
         }
     }
 }
@@ -234,10 +258,16 @@ private fun GalleryPreview(
     accessToken: String?,
     repository: GalleryRepository,
     modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    placeholder: String = "Preview",
 ) {
     var bitmap by remember(image.previewUrl, accessToken) { mutableStateOf<Bitmap?>(null) }
+    var loading by remember(image.previewUrl, accessToken) { mutableStateOf(false) }
     LaunchedEffect(image.previewUrl, accessToken) {
+        bitmap = null
+        loading = accessToken != null
         bitmap = accessToken?.let { repository.loadPreview(it, image) }
+        loading = false
     }
     Box(
         modifier =
@@ -248,14 +278,75 @@ private fun GalleryPreview(
     ) {
         val currentBitmap = bitmap
         if (currentBitmap == null) {
-            Text("Preview")
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            } else {
+                Text(placeholder)
+            }
         } else {
             Image(
                 bitmap = currentBitmap.asImageBitmap(),
                 contentDescription = image.name,
-                contentScale = ContentScale.Crop,
+                contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
+        }
+    }
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun GalleryImageViewerDialog(
+    image: GalleryImage,
+    accessToken: String?,
+    repository: GalleryRepository,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        image.name.substringAfterLast("/"),
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    TextButton(onClick = onDismiss) {
+                        Text("Close")
+                    }
+                }
+                GalleryPreview(
+                    image = image,
+                    accessToken = accessToken,
+                    repository = repository,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 240.dp, max = 560.dp),
+                    contentScale = ContentScale.Fit,
+                    placeholder = "Image unavailable",
+                )
+                Text(
+                    image.sourceBlobName ?: image.name,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }
