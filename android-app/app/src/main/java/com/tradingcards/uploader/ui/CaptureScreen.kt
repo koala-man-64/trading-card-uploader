@@ -19,7 +19,7 @@ fun CaptureScreen(
     modifier: Modifier = Modifier,
     statusText: String,
     latestUpload: UploadEntity?,
-    onSignIn: () -> Unit,
+    onAuthenticate: () -> Unit,
     onCapture: () -> Unit,
 ) {
     MaterialTheme {
@@ -35,7 +35,7 @@ fun CaptureScreen(
                 style = MaterialTheme.typography.headlineSmall,
             )
             Text(statusText)
-            Button(onClick = onSignIn) {
+            Button(onClick = onAuthenticate) {
                 Text("Sign in")
             }
             Button(onClick = onCapture) {

@@ -21,25 +21,50 @@ class MsalAuthRepository(private val context: Context) {
     private val uploadScopes = arrayOf(BuildConfig.UPLOAD_API_SCOPE)
     private val galleryScopes = arrayOf(BuildConfig.GALLERY_MANAGE_SCOPE)
 
-    suspend fun signIn(activity: Activity): String {
-        return acquireToken(activity, uploadScopes)
-    }
+    suspend fun acquireUploadToken(activity: Activity): String =
+        acquireToken(activity, uploadScopes)
 
-    suspend fun acquireGalleryManageToken(activity: Activity): String {
-        return acquireToken(activity, galleryScopes)
-    }
+    suspend fun acquireGalleryManageToken(activity: Activity): String =
+        acquireToken(activity, galleryScopes)
 
-    suspend fun acquireToken(
+    private suspend fun acquireToken(
         activity: Activity,
         scopes: Array<String>,
     ): String {
         val app = application()
         existingAccount(app)?.let {
             return runCatching { acquireTokenSilent(app, scopes) }
-                .getOrElse { interactiveSignIn(app, activity, scopes) }
+                .getOrElse { interactiveAcquireToken(app, activity, scopes) }
         }
         return interactiveSignIn(app, activity, scopes)
     }
+
+    private suspend fun interactiveAcquireToken(
+        app: IPublicClientApplication,
+        activity: Activity,
+        scopes: Array<String>,
+    ): String =
+        suspendCancellableCoroutine { continuation ->
+            app.acquireToken(
+                activity,
+                scopes,
+                object : AuthenticationCallback {
+                    override fun onSuccess(authenticationResult: IAuthenticationResult) {
+                        continuation.resume(authenticationResult.accessToken)
+                    }
+
+                    override fun onError(exception: MsalException) {
+                        continuation.resumeWithException(exception)
+                    }
+
+                    override fun onCancel() {
+                        continuation.resumeWithException(
+                            IllegalStateException("MSAL token request cancelled"),
+                        )
+                    }
+                },
+            )
+        }
 
     private suspend fun interactiveSignIn(
         app: ISingleAccountPublicClientApplication,
@@ -61,13 +86,15 @@ class MsalAuthRepository(private val context: Context) {
                     }
 
                     override fun onCancel() {
-                        continuation.resumeWithException(IllegalStateException("MSAL sign-in cancelled"))
+                        continuation.resumeWithException(
+                            IllegalStateException("MSAL sign-in cancelled"),
+                        )
                     }
                 },
             )
         }
 
-    suspend fun acquireTokenSilent(): String {
+    suspend fun acquireUploadTokenSilent(): String {
         val app = application()
         currentAccount(app)
         return acquireTokenSilent(app, uploadScopes)

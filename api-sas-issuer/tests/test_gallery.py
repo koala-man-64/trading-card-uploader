@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from shared.config import Settings
+from shared.config import DEFAULT_AZURE_STORAGE_API_VERSION, Settings
 from shared.gallery import list_raw_images, require_gallery_admin, require_raw_image_blob_name
 from shared.models import Claims, Problem
 from shared.sas import ConnectionStringSasSigner
@@ -53,6 +53,7 @@ def settings() -> Settings:
             "EndpointSuffix=core.windows.net"
         ),
         managed_identity_client_id=None,
+        storage_api_version=DEFAULT_AZURE_STORAGE_API_VERSION,
         gallery_manage_scope="gallery.manage",
         admin_allowed_object_ids=("admin-user",),
         admin_allowed_roles=("Gallery.Admin",),

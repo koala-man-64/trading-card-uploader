@@ -125,9 +125,7 @@ class MainActivity : ComponentActivity() {
             galleryState = galleryState.copy(loading = true, statusText = "Applying action")
             scope.launch {
                 runCatching {
-                    val token =
-                        galleryState.accessToken
-                            ?: authRepository.acquireGalleryManageToken(this@MainActivity)
+                    val token = authRepository.acquireGalleryManageToken(this@MainActivity)
                     for (sourceName in sourceNames) {
                         sourceAction(token, sourceName)
                     }
@@ -200,8 +198,8 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(contentPadding),
                             statusText = statusText,
                             latestUpload = latestUpload,
-                            onSignIn = {
-                                signIn(
+                            onAuthenticate = {
+                                authenticateForUpload(
                                     scope = scope,
                                     authRepository = authRepository,
                                     onStatusTextChanged = { statusText = it },
@@ -294,15 +292,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    private fun signIn(
+    private fun authenticateForUpload(
         scope: CoroutineScope,
         authRepository: MsalAuthRepository,
         onStatusTextChanged: (String) -> Unit,
     ) {
         scope.launch {
-            runCatching { authRepository.signIn(this@MainActivity) }
-                .onSuccess { onStatusTextChanged("Signed in") }
-                .onFailure { onStatusTextChanged("Sign-in failed: ${it.message}") }
+            runCatching { authRepository.acquireUploadToken(this@MainActivity) }
+                .onSuccess { onStatusTextChanged("Authenticated") }
+                .onFailure { onStatusTextChanged("Authentication failed: ${it.message}") }
         }
     }
 
