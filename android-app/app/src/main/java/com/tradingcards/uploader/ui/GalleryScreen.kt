@@ -49,6 +49,11 @@ private enum class PendingGalleryAction {
     Reprocess,
 }
 
+private data class GalleryPreviewLoader(
+    val accessToken: String?,
+    val repository: GalleryRepository,
+)
+
 @Suppress(
     "FunctionNaming",
     "LongMethod",
@@ -68,6 +73,7 @@ fun GalleryScreen(
 ) {
     var pendingAction by remember { mutableStateOf<PendingGalleryAction?>(null) }
     var viewingImage by remember { mutableStateOf<GalleryImage?>(null) }
+    val previewLoader = GalleryPreviewLoader(state.accessToken, repository)
     val selectedCount = state.selectedNames.size
 
     Column(
@@ -113,8 +119,7 @@ fun GalleryScreen(
                 GalleryImageCard(
                     image = image,
                     selected = image.name in state.selectedNames,
-                    accessToken = state.accessToken,
-                    repository = repository,
+                    previewLoader = previewLoader,
                     onToggleSelected = { onToggleSelected(image) },
                     onViewImage = { viewingImage = image },
                 )
@@ -156,8 +161,7 @@ fun GalleryScreen(
     viewingImage?.let { image ->
         GalleryImageViewerDialog(
             image = image,
-            accessToken = state.accessToken,
-            repository = repository,
+            previewLoader = previewLoader,
             onDismiss = { viewingImage = null },
         )
     }
@@ -196,8 +200,7 @@ private fun CategoryTabs(
 private fun GalleryImageCard(
     image: GalleryImage,
     selected: Boolean,
-    accessToken: String?,
-    repository: GalleryRepository,
+    previewLoader: GalleryPreviewLoader,
     onToggleSelected: () -> Unit,
     onViewImage: () -> Unit,
 ) {
@@ -210,8 +213,7 @@ private fun GalleryImageCard(
         Box {
             GalleryPreview(
                 image = image,
-                accessToken = accessToken,
-                repository = repository,
+                previewLoader = previewLoader,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -255,18 +257,18 @@ private fun GalleryImageCard(
 @Composable
 private fun GalleryPreview(
     image: GalleryImage,
-    accessToken: String?,
-    repository: GalleryRepository,
+    previewLoader: GalleryPreviewLoader,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     placeholder: String = "Preview",
 ) {
+    val accessToken = previewLoader.accessToken
     var bitmap by remember(image.previewUrl, accessToken) { mutableStateOf<Bitmap?>(null) }
     var loading by remember(image.previewUrl, accessToken) { mutableStateOf(false) }
     LaunchedEffect(image.previewUrl, accessToken) {
         bitmap = null
         loading = accessToken != null
-        bitmap = accessToken?.let { repository.loadPreview(it, image) }
+        bitmap = accessToken?.let { previewLoader.repository.loadPreview(it, image) }
         loading = false
     }
     Box(
@@ -298,8 +300,7 @@ private fun GalleryPreview(
 @Composable
 private fun GalleryImageViewerDialog(
     image: GalleryImage,
-    accessToken: String?,
-    repository: GalleryRepository,
+    previewLoader: GalleryPreviewLoader,
     onDismiss: () -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -331,8 +332,7 @@ private fun GalleryImageViewerDialog(
                 }
                 GalleryPreview(
                     image = image,
-                    accessToken = accessToken,
-                    repository = repository,
+                    previewLoader = previewLoader,
                     modifier =
                         Modifier
                             .fillMaxWidth()
