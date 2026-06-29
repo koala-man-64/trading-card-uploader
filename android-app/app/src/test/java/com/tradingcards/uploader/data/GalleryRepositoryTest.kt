@@ -1,6 +1,7 @@
 package com.tradingcards.uploader.data
 
 import com.tradingcards.uploader.model.GalleryCategory
+import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.GalleryImageDeleteRequest
 import com.tradingcards.uploader.model.GalleryImageDeleteResponse
 import com.tradingcards.uploader.model.GalleryImagesResponse
@@ -37,6 +38,53 @@ class GalleryRepositoryTest {
                 error?.message,
             )
         }
+
+    @Test
+    fun previewUrlResolverKeepsAbsoluteUrls() {
+        val resolved =
+            resolveGalleryPreviewUrl(
+                apiBaseUrl = "https://api.example.test/api/",
+                previewUrl = "https://storage.example.test/raw/a.jpg?sig=abc",
+            )
+
+        assertEquals("https://storage.example.test/raw/a.jpg?sig=abc", resolved)
+    }
+
+    @Test
+    fun previewUrlResolverUsesApiHostForRelativeUrls() {
+        val resolved =
+            resolveGalleryPreviewUrl(
+                apiBaseUrl = "https://api.example.test/api/",
+                previewUrl = "/api/v1/admin/gallery/image?category=processed&name=processed%2Fa.jpg",
+            )
+
+        assertEquals(
+            "https://api.example.test/api/v1/admin/gallery/image?category=processed&name=processed%2Fa.jpg",
+            resolved,
+        )
+        assertTrue(shouldAttachGalleryBearer("https://api.example.test/api/", resolved))
+    }
+
+    @Test
+    fun galleryImageEndpointUrlEncodesCategoryAndName() {
+        val image =
+            GalleryImage(
+                category = GalleryCategory.Processed.wireValue,
+                name = "processed/card one.jpg",
+                sourceBlobName = "raw/card one.jpg",
+                size = 1,
+                lastModifiedUtc = null,
+                previewUrl = "/api/v1/admin/gallery/image?category=processed&name=processed%2Fcard+one.jpg",
+                canCascade = true,
+            )
+
+        val resolved = galleryImageEndpointUrl("https://api.example.test/api", image)
+
+        assertEquals(
+            "https://api.example.test/api/v1/admin/gallery/image?category=processed&name=processed%2Fcard+one.jpg",
+            resolved,
+        )
+    }
 
     private fun scannerNotConfiguredClient(): SasIssuerClient =
         object : SasIssuerClient {
