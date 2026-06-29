@@ -20,6 +20,7 @@ param(
     [string]$DevKeystorePassword,
     [string]$DevKeyPassword,
     [string[]]$AdminAllowedObjectIds = @(),
+    [string]$ScannerAdminBaseUrl,
     [switch]$GrantAdminConsent,
     [switch]$AssignAzureRoles
 )
@@ -556,6 +557,9 @@ $variables = [ordered]@{
 }
 if ($AdminAllowedObjectIds.Count -gt 0) {
     $variables["ADMIN_ALLOWED_OBJECT_IDS"] = $AdminAllowedObjectIds -join ","
+}
+if (-not [string]::IsNullOrWhiteSpace($ScannerAdminBaseUrl)) {
+    $variables["SCANNER_ADMIN_BASE_URL"] = $ScannerAdminBaseUrl.TrimEnd("/")
 }
 foreach ($entry in $variables.GetEnumerator()) {
     Update-GitHubEnvironmentVariable -Name $entry.Key -Value $entry.Value
