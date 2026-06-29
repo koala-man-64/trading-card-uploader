@@ -17,6 +17,7 @@ func start --python
 
 Local Azurite mode uses `SAS_SIGNER_MODE=connection_string`. Use the Azurite development storage credential only in your ignored local settings file.
 `AZURE_STORAGE_API_VERSION` controls the `x-ms-version` header the Android app must send with blob `PUT` requests. Keep the default `2021-08-06` for Azurite or older-compatible local storage endpoints.
+`SCANNER_ADMIN_BASE_URL` must point to the scanner host root for processed and segmented gallery operations, for example `http://127.0.0.1:7072` for a local scanner Function host.
 
 ## Android
 

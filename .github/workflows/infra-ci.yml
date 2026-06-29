@@ -47,7 +47,12 @@ jobs:
       - name: What-if dev deployment
         env:
           ADMIN_ALLOWED_OBJECT_IDS: ${{ vars.ADMIN_ALLOWED_OBJECT_IDS }}
+          SCANNER_ADMIN_BASE_URL: ${{ vars.SCANNER_ADMIN_BASE_URL }}
         run: |
+          if [ -z "$SCANNER_ADMIN_BASE_URL" ]; then
+            echo "::error::Set SCANNER_ADMIN_BASE_URL in the dev GitHub environment before deploying Admin Gallery infrastructure."
+            exit 1
+          fi
           admin_allowed_object_ids="$(python3 - <<'PY'
           import json
           import os
@@ -68,6 +73,7 @@ jobs:
               apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
               allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]' \
               adminAllowedObjectIds="$admin_allowed_object_ids" \
+              scannerAdminBaseUrl="$SCANNER_ADMIN_BASE_URL" \
               githubSmokePrincipalId="${{ vars.SMOKE_PRINCIPAL_ID }}"
 
   deploy-dev:
@@ -86,7 +92,12 @@ jobs:
       - name: Deploy dev infrastructure
         env:
           ADMIN_ALLOWED_OBJECT_IDS: ${{ vars.ADMIN_ALLOWED_OBJECT_IDS }}
+          SCANNER_ADMIN_BASE_URL: ${{ vars.SCANNER_ADMIN_BASE_URL }}
         run: |
+          if [ -z "$SCANNER_ADMIN_BASE_URL" ]; then
+            echo "::error::Set SCANNER_ADMIN_BASE_URL in the dev GitHub environment before deploying Admin Gallery infrastructure."
+            exit 1
+          fi
           admin_allowed_object_ids="$(python3 - <<'PY'
           import json
           import os
@@ -107,6 +118,7 @@ jobs:
               apiAppIdUri="${{ vars.API_APP_ID_URI }}" \
               allowedAndroidClientIds='["${{ vars.ANDROID_CLIENT_ID }}"]' \
               adminAllowedObjectIds="$admin_allowed_object_ids" \
+              scannerAdminBaseUrl="$SCANNER_ADMIN_BASE_URL" \
               githubSmokePrincipalId="${{ vars.SMOKE_PRINCIPAL_ID }}" \
             > dev-deployment.json
       - name: Export dev deployment outputs
