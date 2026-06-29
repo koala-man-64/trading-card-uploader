@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
                 }.onSuccess { (token, loaded) ->
                     galleryState =
                         galleryState.copy(
-                            category = loaded.category,
+                            category = loaded.selectedCategory,
                             items = loaded.response.items,
                             loading = false,
                             statusText = galleryStatusText(loaded),
@@ -134,12 +134,13 @@ class MainActivity : ComponentActivity() {
                     for (image in individualImages) {
                         imageAction?.invoke(token, image)
                     }
-                    val response = galleryRepository.list(token, galleryState.category)
-                    token to response
-                }.onSuccess { (token, response) ->
+                    val loaded = loadGalleryWithRawFallback(token, galleryState.category, galleryRepository)
+                    token to loaded
+                }.onSuccess { (token, loaded) ->
                     galleryState =
                         galleryState.copy(
-                            items = response.items,
+                            category = loaded.selectedCategory,
+                            items = loaded.response.items,
                             selectedNames = emptySet(),
                             loading = false,
                             statusText = "Action complete",
@@ -367,20 +368,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class LoadedGallery(
-    val category: GalleryCategory,
+internal data class LoadedGallery(
+    val selectedCategory: GalleryCategory,
     val response: GalleryImagesResponse,
     val scannerFallback: Boolean,
 )
 
-private suspend fun loadGalleryWithRawFallback(
+internal suspend fun loadGalleryWithRawFallback(
     token: String,
     category: GalleryCategory,
     repository: GalleryRepository,
 ): LoadedGallery =
     try {
         LoadedGallery(
-            category = category,
+            selectedCategory = category,
             response = repository.list(token, category),
             scannerFallback = false,
         )
@@ -389,7 +390,7 @@ private suspend fun loadGalleryWithRawFallback(
             throw error
         }
         LoadedGallery(
-            category = GalleryCategory.Raw,
+            selectedCategory = category,
             response = repository.list(token, GalleryCategory.Raw),
             scannerFallback = true,
         )

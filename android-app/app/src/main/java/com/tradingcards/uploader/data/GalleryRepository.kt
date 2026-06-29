@@ -15,6 +15,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import retrofit2.Response
 import java.net.URI
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 internal const val SCANNER_NOT_CONFIGURED_CODE = "scanner_not_configured"
 
@@ -101,31 +103,33 @@ class GalleryRepository(
         image: GalleryImage,
     ): Bitmap? =
         withContext(Dispatchers.IO) {
-            val url = resolvePreviewUrl(image.previewUrl)
-            val requestBuilder = Request.Builder().url(url)
-            if (shouldAttachBearer(url)) {
-                requestBuilder.header("Authorization", bearer(accessToken))
+            val urls =
+                listOfNotNull(
+                    runCatching { resolveGalleryPreviewUrl(apiBaseUrl, image.previewUrl) }.getOrNull(),
+                    runCatching { galleryImageEndpointUrl(apiBaseUrl, image) }.getOrNull(),
+                ).distinct()
+            for (url in urls) {
+                runCatching { loadPreviewBitmap(accessToken, url) }
+                    .getOrNull()
+                    ?.let { return@withContext it }
             }
-            httpClient.newCall(requestBuilder.build()).execute().use { response ->
-                if (!response.isSuccessful) {
-                    return@withContext null
-                }
-                response.body?.byteStream()?.use(BitmapFactory::decodeStream)
-            }
+            null
         }
 
-    private fun resolvePreviewUrl(previewUrl: String): String {
-        val preview = URI(previewUrl)
-        if (preview.isAbsolute) {
-            return preview.toString()
+    private fun loadPreviewBitmap(
+        accessToken: String,
+        url: String,
+    ): Bitmap? {
+        val requestBuilder = Request.Builder().url(url)
+        if (shouldAttachGalleryBearer(apiBaseUrl, url)) {
+            requestBuilder.header("Authorization", bearer(accessToken))
         }
-        return URI(apiBaseUrl).resolve(previewUrl).toString()
-    }
-
-    private fun shouldAttachBearer(url: String): Boolean {
-        val apiUri = URI(apiBaseUrl)
-        val previewUri = URI(url)
-        return apiUri.host.equals(previewUri.host, ignoreCase = true)
+        httpClient.newCall(requestBuilder.build()).execute().use { response ->
+            if (!response.isSuccessful) {
+                return null
+            }
+            return response.body?.byteStream()?.use(BitmapFactory::decodeStream)
+        }
     }
 
     private fun bearer(accessToken: String) = "Bearer $accessToken"
@@ -158,3 +162,40 @@ class GalleryRepository(
             }
         }.getOrNull()
 }
+
+internal fun resolveGalleryPreviewUrl(
+    apiBaseUrl: String,
+    previewUrl: String,
+): String {
+    val preview = URI(previewUrl)
+    if (preview.isAbsolute) {
+        return preview.toString()
+    }
+    return apiBaseUri(apiBaseUrl).resolve(previewUrl).toString()
+}
+
+internal fun galleryImageEndpointUrl(
+    apiBaseUrl: String,
+    image: GalleryImage,
+): String =
+    apiBaseUri(apiBaseUrl)
+        .resolve(
+            "v1/admin/gallery/image?category=${queryValue(image.category)}&name=${queryValue(image.name)}",
+        )
+        .toString()
+
+internal fun shouldAttachGalleryBearer(
+    apiBaseUrl: String,
+    url: String,
+): Boolean {
+    val apiUri = apiBaseUri(apiBaseUrl)
+    val previewUri = URI(url)
+    return apiUri.host.equals(previewUri.host, ignoreCase = true)
+}
+
+private fun apiBaseUri(apiBaseUrl: String): URI {
+    val normalized = apiBaseUrl.takeIf { it.endsWith("/") } ?: "$apiBaseUrl/"
+    return URI(normalized)
+}
+
+private fun queryValue(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
