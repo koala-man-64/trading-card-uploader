@@ -11,7 +11,9 @@ param namePrefix string = 'tcu'
 param tags object = {}
 param pythonVersion string = '3.11'
 param functionsExtensionVersion string = '~4'
-param uploadContainerName string = 'card-uploads'
+param createUploadStorage bool = false
+param uploadStorageAccountName string = 'tcsstorageeastus2'
+param uploadContainerName string = 'input'
 param maxUploadBytes int = 10485760
 param sasTtlMinutes int = 5
 param allowedContentTypes array = [
@@ -38,7 +40,9 @@ param githubSmokePrincipalId string = ''
 
 var normalizedPrefix = toLower(replace('${namePrefix}${env}', '-', ''))
 var unique = uniqueString(resourceGroup().id, env, namePrefix)
-var uploadStorageName = take('${normalizedPrefix}upload${unique}', 24)
+var generatedUploadStorageName = take('${normalizedPrefix}upload${unique}', 24)
+var effectiveUploadStorageAccountName = createUploadStorage ? generatedUploadStorageName : uploadStorageAccountName
+var uploadBlobEndpoint = 'https://${effectiveUploadStorageAccountName}.blob.core.windows.net/'
 var hostStorageName = take('${normalizedPrefix}host${unique}', 24)
 var functionAppName = '${namePrefix}-${env}-sas-issuer-${unique}'
 var identityName = '${namePrefix}-${env}-sas-issuer-id'
@@ -69,8 +73,8 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
   tags: tags
 }
 
-resource uploadStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: uploadStorageName
+resource managedUploadStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = if (createUploadStorage) {
+  name: generatedUploadStorageName
   location: location
   tags: tags
   sku: {
@@ -94,9 +98,9 @@ resource uploadStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
-resource uploadBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+resource managedUploadBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = if (createUploadStorage) {
   name: 'default'
-  parent: uploadStorage
+  parent: managedUploadStorage
   properties: {
     deleteRetentionPolicy: {
       enabled: true
@@ -109,9 +113,26 @@ resource uploadBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-
   }
 }
 
-resource uploadContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+resource managedUploadContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (createUploadStorage) {
   name: uploadContainerName
-  parent: uploadBlobService
+  parent: managedUploadBlobService
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource existingUploadStorage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = if (!createUploadStorage) {
+  name: uploadStorageAccountName
+}
+
+resource existingUploadBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' existing = if (!createUploadStorage) {
+  name: 'default'
+  parent: existingUploadStorage
+}
+
+resource existingUploadContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (!createUploadStorage) {
+  name: uploadContainerName
+  parent: existingUploadBlobService
   properties: {
     publicAccess: 'None'
   }
@@ -265,7 +286,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'UPLOAD_STORAGE_ACCOUNT_URL'
-          value: uploadStorage.properties.primaryEndpoints.blob
+          value: uploadBlobEndpoint
         }
         {
           name: 'UPLOAD_CONTAINER_NAME'
@@ -359,9 +380,9 @@ resource functionPackageHostBlobReader 'Microsoft.Authorization/roleAssignments@
   }
 }
 
-resource uploadDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(uploadStorage.id, identity.id, 'upload-blob-delegator')
-  scope: uploadStorage
+resource managedUploadDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createUploadStorage) {
+  name: guid(managedUploadStorage.id, identity.id, 'upload-blob-delegator')
+  scope: managedUploadStorage
   properties: {
     roleDefinitionId: storageBlobDelegatorRoleId
     principalId: identity.properties.principalId
@@ -369,9 +390,19 @@ resource uploadDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   }
 }
 
-resource uploadContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(uploadContainer.id, identity.id, 'upload-container-contributor')
-  scope: uploadContainer
+resource existingUploadDelegator 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!createUploadStorage) {
+  name: guid(existingUploadStorage.id, identity.id, 'upload-blob-delegator')
+  scope: existingUploadStorage
+  properties: {
+    roleDefinitionId: storageBlobDelegatorRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource managedUploadContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createUploadStorage) {
+  name: guid(managedUploadContainer.id, identity.id, 'upload-container-contributor')
+  scope: managedUploadContainer
   properties: {
     roleDefinitionId: storageBlobDataContributorRoleId
     principalId: identity.properties.principalId
@@ -379,9 +410,29 @@ resource uploadContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
-resource smokeReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(githubSmokePrincipalId) && env != 'prod') {
-  name: guid(uploadContainer.id, githubSmokePrincipalId, 'smoke-reader')
-  scope: uploadContainer
+resource existingUploadContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!createUploadStorage) {
+  name: guid(existingUploadContainer.id, identity.id, 'upload-container-contributor')
+  scope: existingUploadContainer
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleId
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource managedSmokeReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createUploadStorage && !empty(githubSmokePrincipalId) && env != 'prod') {
+  name: guid(managedUploadContainer.id, githubSmokePrincipalId, 'smoke-reader')
+  scope: managedUploadContainer
+  properties: {
+    roleDefinitionId: storageBlobDataReaderRoleId
+    principalId: githubSmokePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource existingSmokeReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!createUploadStorage && !empty(githubSmokePrincipalId) && env != 'prod') {
+  name: guid(existingUploadContainer.id, githubSmokePrincipalId, 'smoke-reader')
+  scope: existingUploadContainer
   properties: {
     roleDefinitionId: storageBlobDataReaderRoleId
     principalId: githubSmokePrincipalId
@@ -412,9 +463,9 @@ resource smokeWorkspaceReader 'Microsoft.Authorization/roleAssignments@2022-04-0
 output functionAppName string = functionApp.name
 output functionAppPrincipalId string = identity.properties.principalId
 output functionBaseUrl string = 'https://${functionApp.properties.defaultHostName}/api/'
-output uploadStorageAccountName string = uploadStorage.name
-output uploadContainerName string = uploadContainer.name
-output uploadBlobEndpoint string = uploadStorage.properties.primaryEndpoints.blob
+output uploadStorageAccountName string = effectiveUploadStorageAccountName
+output uploadContainerName string = uploadContainerName
+output uploadBlobEndpoint string = uploadBlobEndpoint
 output hostStorageAccountName string = hostStorage.name
 output appInsightsName string = appInsights.name
 output appInsightsResourceId string = appInsights.id
