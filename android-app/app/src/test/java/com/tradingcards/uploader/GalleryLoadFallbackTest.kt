@@ -38,7 +38,44 @@ class GalleryLoadFallbackTest {
             assertTrue(loaded.scannerFallback)
         }
 
+    @Test
+    fun scannerListFailureFallsBackToRawGallery() =
+        runTest {
+            val repository =
+                GalleryRepository(
+                    apiBaseUrl = "https://api.example.test/api/",
+                    client = scannerListFailureForProcessedClient(),
+                )
+
+            val loaded = loadGalleryWithRawFallback("token", GalleryCategory.Processed, repository)
+
+            assertEquals(GalleryCategory.Processed, loaded.selectedCategory)
+            assertEquals(GalleryCategory.Raw.wireValue, loaded.response.category)
+            assertEquals(listOf("raw/a.jpg"), loaded.response.items.map { it.name })
+            assertTrue(loaded.scannerFallback)
+        }
+
     private fun scannerNotConfiguredForProcessedClient(): SasIssuerClient =
+        fallbackClient(
+            """
+            {
+              "error": "$SCANNER_NOT_CONFIGURED_CODE",
+              "message": "SCANNER_ADMIN_BASE_URL is required for scanner gallery operations"
+            }
+            """.trimIndent(),
+        )
+
+    private fun scannerListFailureForProcessedClient(): SasIssuerClient =
+        fallbackClient(
+            """
+            {
+              "error": "gallery_list_failed",
+              "message": "Gallery images could not be listed"
+            }
+            """.trimIndent(),
+        )
+
+    private fun fallbackClient(processedErrorBody: String): SasIssuerClient =
         object : SasIssuerClient {
             override suspend fun healthz(): Response<Map<String, String>> = error("healthz was not expected")
 
@@ -73,16 +110,9 @@ class GalleryLoadFallbackTest {
                         ),
                     )
                 } else {
-                    val responseBody =
-                        """
-                        {
-                          "error": "$SCANNER_NOT_CONFIGURED_CODE",
-                          "message": "SCANNER_ADMIN_BASE_URL is required for scanner gallery operations"
-                        }
-                        """.trimIndent()
                     Response.error(
                         500,
-                        responseBody.toResponseBody("application/json".toMediaType()),
+                        processedErrorBody.toResponseBody("application/json".toMediaType()),
                     )
                 }
 

@@ -29,7 +29,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.tradingcards.uploader.auth.MsalAuthRepository
 import com.tradingcards.uploader.data.GalleryRepository
-import com.tradingcards.uploader.data.ScannerNotConfiguredException
 import com.tradingcards.uploader.data.UploadQueueDao
 import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.model.GalleryCategory
@@ -493,22 +492,28 @@ internal suspend fun loadGalleryWithRawFallback(
     category: GalleryCategory,
     repository: GalleryRepository,
 ): LoadedGallery =
-    try {
-        LoadedGallery(
-            selectedCategory = category,
-            response = repository.list(token, category),
-            scannerFallback = false,
-        )
-    } catch (error: ScannerNotConfiguredException) {
-        if (category == GalleryCategory.Raw) {
-            throw error
-        }
-        LoadedGallery(
-            selectedCategory = category,
-            response = repository.list(token, GalleryCategory.Raw),
-            scannerFallback = true,
-        )
-    }
+    runCatching {
+        repository.list(token, category)
+    }.fold(
+        onSuccess = { response ->
+            LoadedGallery(
+                selectedCategory = category,
+                response = response,
+                scannerFallback = false,
+            )
+        },
+        onFailure = { error ->
+            throwIfCancellation(error)
+            if (category == GalleryCategory.Raw) {
+                throw error
+            }
+            LoadedGallery(
+                selectedCategory = category,
+                response = repository.list(token, GalleryCategory.Raw),
+                scannerFallback = true,
+            )
+        },
+    )
 
 internal fun galleryStateForRefreshStart(
     state: GalleryUiState,
