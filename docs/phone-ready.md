@@ -8,11 +8,11 @@ Configure Entra before building the phone APK:
 
 - API app registration exposes `upload.write` and `gallery.manage` at the API app ID URI.
 - Android public client registration uses package `com.tradingcards.uploader`.
-- Android redirect URI is `msauth://com.tradingcards.uploader/<dev-signature-hash>`.
+- Android redirect URI is `msauth://com.tradingcards.uploader/<url-encoded-dev-signature-hash>`.
 - Dev gallery administrators are listed in `ADMIN_ALLOWED_OBJECT_IDS`.
 - GitHub Azure OIDC app has a federated credential for the `dev` environment.
 
-The repo-provided setup script can create or update those dev registrations, generate or reuse a stable ignored dev signing keystore, compute the MSAL signature hash, create the GitHub `dev` environment, and write the known GitHub environment values:
+The repo-provided setup script can create or update those dev registrations, generate or reuse a stable ignored dev signing keystore, compute the MSAL signature hash, create the ignored local Android debug auth files, create the GitHub `dev` environment, and write the known GitHub environment values:
 
 ```powershell
 .\scripts\Initialize-DevPhoneEnvironment.ps1 `
@@ -22,7 +22,7 @@ The repo-provided setup script can create or update those dev registrations, gen
   -AssignAzureRoles
 ```
 
-The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. Keep that keystore stable so the Entra Android redirect signature hash stays stable. If `-AdminAllowedObjectIds` is omitted while running as a user, the script stores the signed-in user's object ID in `ADMIN_ALLOWED_OBJECT_IDS`; pass explicit object IDs to use a different dev admin allow-list. `-ScannerAdminBaseUrl` writes `SCANNER_ADMIN_BASE_URL`; use the scanner host root, not a path ending in `/api`. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere. `SMOKE_PRINCIPAL_ID` is that same service principal object ID, and dev infra grants it the host-storage package-publish role plus smoke-verification reader roles. The Function App uses a system-assigned identity for package reads and the user-assigned identity for SAS/storage operations.
+The script stores the reusable dev keystore and local metadata under `.local/phone-dev/`, which is ignored. It also writes ignored local Android build files under `android-app/local.properties` and `android-app/app/src/debug/res/raw/msal_auth_config.json`. The debug JSON and Entra app registration use the URL-encoded signature hash; `android-app/local.properties` keeps the raw hash for the manifest placeholder. Keep that keystore stable so the Entra Android redirect signature hash stays stable. If `-AdminAllowedObjectIds` is omitted while running as a user, the script stores the signed-in user's object ID in `ADMIN_ALLOWED_OBJECT_IDS`; pass explicit object IDs to use a different dev admin allow-list. `-ScannerAdminBaseUrl` writes `SCANNER_ADMIN_BASE_URL`; use the scanner host root, not a path ending in `/api`. `-AssignAzureRoles` assigns the GitHub OIDC service principal the dev resource-group permissions needed to deploy infrastructure; omit it if those roles are managed elsewhere. `SMOKE_PRINCIPAL_ID` is that same service principal object ID, and dev infra grants it the host-storage package-publish role plus smoke-verification reader roles. The Function App uses a system-assigned identity for package reads and the user-assigned identity for SAS/storage operations.
 
 Configure the GitHub `dev` environment:
 
@@ -102,7 +102,7 @@ Write-only SAS behavior is proven by the Function unit tests so the app and smok
 
 ## Troubleshooting
 
-- If sign-in fails, verify `ANDROID_CLIENT_ID`, `ANDROID_TENANT_ID`, and the Entra redirect URI for the dev signing hash.
+- If sign-in fails, verify `ANDROID_CLIENT_ID`, `ANDROID_TENANT_ID`, the URL-encoded Entra redirect URI, and the raw manifest `msalRedirectPath` for the dev signing hash.
 - If SAS issuance returns 401 or 403, verify `ANDROID_API_SCOPE`, API app consent, and `ALLOWED_ANDROID_CLIENT_IDS`.
 - If gallery load returns `admin_not_allowed` or HTTP 403, verify `ADMIN_ALLOWED_OBJECT_IDS` contains the signed-in user's Entra object ID, then redeploy dev infra and the Function App.
 - If processed or segmented gallery load returns `scanner_not_configured`, set `SCANNER_ADMIN_BASE_URL`, rerun `infra-ci` with `deployDev=true`, then redeploy the Function App if app settings were refreshed.
