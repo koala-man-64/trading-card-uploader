@@ -127,6 +127,114 @@ function Write-JsonFile {
     [System.IO.File]::WriteAllText($Path, $json, [System.Text.Encoding]::UTF8)
 }
 
+function Read-PropertiesFile {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $properties = [ordered]@{}
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $properties
+    }
+
+    foreach ($rawLine in Get-Content -LiteralPath $Path) {
+        $line = $rawLine.Trim()
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+            continue
+        }
+
+        $separator = $rawLine.IndexOf("=")
+        if ($separator -lt 0) {
+            continue
+        }
+
+        $key = $rawLine.Substring(0, $separator).Trim()
+        $value = $rawLine.Substring($separator + 1).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($key)) {
+            $properties[$key] = $value
+        }
+    }
+
+    return $properties
+}
+
+function Write-PropertiesFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Values
+    )
+
+    $properties = Read-PropertiesFile -Path $Path
+    foreach ($entry in $Values.GetEnumerator()) {
+        $properties[$entry.Key] = $entry.Value
+    }
+
+    $parent = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $lines = $properties.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
+    [System.IO.File]::WriteAllLines($Path, $lines, [System.Text.Encoding]::UTF8)
+}
+
+function ConvertTo-PortablePath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    return (Resolve-Path -LiteralPath $Path).ProviderPath.Replace("\", "/")
+}
+
+function New-MsalRedirectUri {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageName,
+        [Parameter(Mandatory = $true)][string]$SignatureHash
+    )
+
+    $encodedSignatureHash = [System.Uri]::EscapeDataString($SignatureHash)
+    return "msauth://$PackageName/$encodedSignatureHash"
+}
+
+function Write-LocalAndroidDebugAuthConfig {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageName,
+        [Parameter(Mandatory = $true)][string]$AndroidClientId,
+        [Parameter(Mandatory = $true)][string]$TenantId,
+        [Parameter(Mandatory = $true)][string]$UploadApiScope,
+        [Parameter(Mandatory = $true)][string]$GalleryManageScope,
+        [Parameter(Mandatory = $true)][string]$SignatureHash,
+        [Parameter(Mandatory = $true)][object]$Keystore
+    )
+
+    if (-not $PSCmdlet.ShouldProcess("local Android dev auth files", "write ignored MSAL config and Gradle properties")) {
+        return
+    }
+
+    Write-JsonFile -Path "android-app/app/src/debug/res/raw/msal_auth_config.json" -Value ([ordered]@{
+            client_id = $AndroidClientId
+            authorization_user_agent = "DEFAULT"
+            redirect_uri = New-MsalRedirectUri -PackageName $PackageName -SignatureHash $SignatureHash
+            account_mode = "SINGLE"
+            authorities = @(
+                [ordered]@{
+                    type = "AAD"
+                    audience = [ordered]@{
+                        type = "AzureADMyOrg"
+                        tenant_id = $TenantId
+                    }
+                }
+            )
+        })
+
+    Write-PropertiesFile -Path "android-app/local.properties" -Values ([ordered]@{
+            uploadApiScope = $UploadApiScope
+            galleryManageScope = $GalleryManageScope
+            msalRedirectPath = $SignatureHash
+            msalClientId = $AndroidClientId
+            msalTenantId = $TenantId
+            devSigningStoreFile = ConvertTo-PortablePath -Path $Keystore.Path
+            devSigningStorePassword = $Keystore.StorePassword
+            devSigningKeyAlias = $Keystore.Alias
+            devSigningKeyPassword = $Keystore.KeyPassword
+        })
+}
+
 function Invoke-GraphPatch {
     param(
         [Parameter(Mandatory = $true)]
@@ -459,7 +567,7 @@ Ensure-ServicePrincipal -ClientId $ApiClientId | Out-Null
 
 $androidApp = Ensure-AppRegistration -DisplayName $AndroidAppDisplayName -ClientId $AndroidClientId -PublicClient
 $AndroidClientId = $androidApp.appId
-$redirectUri = "msauth://$PackageName/$signatureHash"
+$redirectUri = New-MsalRedirectUri -PackageName $PackageName -SignatureHash $signatureHash
 Invoke-GraphPatch -ApplicationObjectId $androidApp.id -TargetName $AndroidAppDisplayName -Body @{
     isFallbackPublicClient = $true
     publicClient = @{
@@ -561,6 +669,16 @@ if ($AdminAllowedObjectIds.Count -gt 0) {
 if (-not [string]::IsNullOrWhiteSpace($ScannerAdminBaseUrl)) {
     $variables["SCANNER_ADMIN_BASE_URL"] = $ScannerAdminBaseUrl.TrimEnd("/")
 }
+
+Write-LocalAndroidDebugAuthConfig `
+    -PackageName $PackageName `
+    -AndroidClientId $AndroidClientId `
+    -TenantId $TenantId `
+    -UploadApiScope "$ApiAppIdUri/upload.write" `
+    -GalleryManageScope "$ApiAppIdUri/gallery.manage" `
+    -SignatureHash $signatureHash `
+    -Keystore $keystore
+
 foreach ($entry in $variables.GetEnumerator()) {
     Update-GitHubEnvironmentVariable -Name $entry.Key -Value $entry.Value
 }

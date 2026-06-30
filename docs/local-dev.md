@@ -21,12 +21,12 @@ Local Azurite mode uses `SAS_SIGNER_MODE=connection_string`. Use the Azurite dev
 
 ## Android
 
-The checked-in `android-app/app/src/main/res/raw/msal_auth_config.json` is a compile-safe sample. For interactive auth testing, create an ignored debug override at `android-app/app/src/debug/res/raw/msal_auth_config.json` with the dev Entra Android app registration values.
+The checked-in `android-app/app/src/main/res/raw/msal_auth_config.json` is a compile-safe sample. For interactive auth testing, run `scripts/Initialize-DevPhoneEnvironment.ps1`; it creates the ignored debug override at `android-app/app/src/debug/res/raw/msal_auth_config.json` and writes local Gradle auth/signing values to `android-app/local.properties`.
 
-The MSAL redirect URI must match both files below:
+The MSAL redirect URI must match both files below. The JSON and Entra app registration use the URL-encoded hash; the Android manifest path uses the raw hash.
 
-- Debug MSAL config: `msauth://com.tradingcards.uploader/<signature-hash>`
-- Android manifest placeholder: `-PmsalRedirectPath=<signature-hash>`
+- Debug MSAL config: `msauth://com.tradingcards.uploader/<url-encoded-signature-hash>`
+- Android manifest placeholder: `msalRedirectPath=<signature-hash>` in `android-app/local.properties`, or `-PmsalRedirectPath=<signature-hash>`
 
 ```powershell
 Set-Location android-app
@@ -36,6 +36,8 @@ gradle `
   -PmsalRedirectPath=<signature-hash> `
   ktlintCheck detekt lintDebug testDebugUnitTest assembleDebug
 ```
+
+If `android-app/local.properties` already contains the values written by the setup script, the `-PuploadApiScope`, `-PgalleryManageScope`, and `-PmsalRedirectPath` overrides are optional.
 
 The emulator reaches the local Function host at:
 

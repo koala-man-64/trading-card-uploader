@@ -1,4 +1,7 @@
+import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
+import java.net.URLEncoder
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -9,17 +12,34 @@ plugins {
     id("io.gitlab.arturbosch.detekt")
 }
 
-val devSigningStoreFile = providers.gradleProperty("devSigningStoreFile")
-val devSigningStorePassword = providers.gradleProperty("devSigningStorePassword")
-val devSigningKeyAlias = providers.gradleProperty("devSigningKeyAlias")
-val devSigningKeyPassword = providers.gradleProperty("devSigningKeyPassword")
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.isFile) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
+fun gradleOrLocalProperty(name: String) =
+    localProperties
+        .getProperty(name)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { providers.gradleProperty(name).orElse(it) }
+        ?: providers.gradleProperty(name)
+
+val devSigningStoreFile = gradleOrLocalProperty("devSigningStoreFile")
+val devSigningStorePassword = gradleOrLocalProperty("devSigningStorePassword")
+val devSigningKeyAlias = gradleOrLocalProperty("devSigningKeyAlias")
+val devSigningKeyPassword = gradleOrLocalProperty("devSigningKeyPassword")
+val androidApplicationId = "com.tradingcards.uploader"
+
+fun urlEncode(value: String) = URLEncoder.encode(value, Charsets.UTF_8.name())
 
 android {
     namespace = "com.tradingcards.uploader"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.tradingcards.uploader"
+        applicationId = androidApplicationId
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -27,21 +47,18 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val apiBaseUrl =
-            providers.gradleProperty("apiBaseUrl").orElse("http://10.0.2.2:7071/api/")
+        val apiBaseUrl = gradleOrLocalProperty("apiBaseUrl").orElse("http://10.0.2.2:7071/api/")
         buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl.get()}\"")
         val uploadApiScope =
-            providers.gradleProperty("uploadApiScope").orElse(
-                providers.gradleProperty("apiScope").orElse("api://replace-with-api-client-id/upload.write"),
+            gradleOrLocalProperty("uploadApiScope").orElse(
+                gradleOrLocalProperty("apiScope").orElse("api://replace-with-api-client-id/upload.write"),
             )
         buildConfigField("String", "UPLOAD_API_SCOPE", "\"${uploadApiScope.get()}\"")
         val galleryManageScope =
-            providers
-                .gradleProperty("galleryManageScope")
+            gradleOrLocalProperty("galleryManageScope")
                 .orElse("api://replace-with-api-client-id/gallery.manage")
         buildConfigField("String", "GALLERY_MANAGE_SCOPE", "\"${galleryManageScope.get()}\"")
-        val msalRedirectPath =
-            providers.gradleProperty("msalRedirectPath").orElse("PLACEHOLDER_SIGNATURE_HASH")
+        val msalRedirectPath = gradleOrLocalProperty("msalRedirectPath").orElse("PLACEHOLDER_SIGNATURE_HASH")
         manifestPlaceholders["msalRedirectPath"] = msalRedirectPath.get()
     }
 
@@ -133,7 +150,7 @@ tasks.register("validatePhoneBuildConfig") {
             )
         val values =
             requiredProperties.associateWith {
-                providers.gradleProperty(it).orNull?.trim().orEmpty()
+                gradleOrLocalProperty(it).orNull?.trim().orEmpty()
             }
         val missing = values.filterValues { it.isBlank() }.keys
         if (missing.isNotEmpty()) {
@@ -168,6 +185,36 @@ tasks.register("validatePhoneBuildConfig") {
         }
         if (!file(values.getValue("devSigningStoreFile")).isFile) {
             throw GradleException("devSigningStoreFile does not exist")
+        }
+
+        val debugMsalConfigFile = file("src/debug/res/raw/msal_auth_config.json")
+        if (!debugMsalConfigFile.isFile) {
+            throw GradleException(
+                "Missing debug MSAL config at ${debugMsalConfigFile.path}; run scripts/Initialize-DevPhoneEnvironment.ps1 first",
+            )
+        }
+
+        val msalConfig =
+            JsonSlurper().parse(debugMsalConfigFile) as? Map<*, *>
+                ?: throw GradleException("Debug MSAL config must be a JSON object")
+        val expectedRedirectUri =
+            "msauth://$androidApplicationId/${urlEncode(values.getValue("msalRedirectPath"))}"
+        val actualRedirectUri = msalConfig["redirect_uri"]?.toString()?.trim().orEmpty()
+        if (actualRedirectUri != expectedRedirectUri) {
+            throw GradleException(
+                "Debug MSAL redirect_uri must be $expectedRedirectUri; found $actualRedirectUri",
+            )
+        }
+        val actualClientId = msalConfig["client_id"]?.toString()?.trim().orEmpty()
+        if (actualClientId != values.getValue("msalClientId")) {
+            throw GradleException("Debug MSAL client_id does not match msalClientId")
+        }
+        val authorities = msalConfig["authorities"] as? List<*> ?: emptyList<Any?>()
+        val firstAuthority = authorities.firstOrNull() as? Map<*, *>
+        val audience = firstAuthority?.get("audience") as? Map<*, *>
+        val actualTenantId = audience?.get("tenant_id")?.toString()?.trim().orEmpty()
+        if (actualTenantId != values.getValue("msalTenantId")) {
+            throw GradleException("Debug MSAL tenant_id does not match msalTenantId")
         }
     }
 }
