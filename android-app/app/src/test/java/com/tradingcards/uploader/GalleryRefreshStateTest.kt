@@ -95,7 +95,6 @@ class GalleryRefreshStateTest {
                     items = images.toList(),
                     nextCursor = null,
                 ),
-            scannerFallback = false,
         )
 
     private fun image(name: String): GalleryImage =
