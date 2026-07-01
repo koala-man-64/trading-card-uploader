@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             authRepository.acquireGalleryManageToken(this@MainActivity)
                         }
-                    val loaded = loadGalleryWithRawFallback(token, category, galleryRepository)
+                    val loaded = loadGallery(token, category, galleryRepository)
                     galleryState = galleryStateForRefreshSuccess(galleryState, token, loaded, reason)
                 }.fold(
                     onSuccess = { true },
@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
                         for (image in individualImages) {
                             imageAction?.invoke(token, image)
                         }
-                        val loaded = loadGalleryWithRawFallback(token, galleryState.category, galleryRepository)
+                        val loaded = loadGallery(token, galleryState.category, galleryRepository)
                         galleryState =
                             galleryStateForRefreshSuccess(
                                 galleryState,
@@ -484,35 +484,16 @@ internal enum class GalleryRefreshReason {
 internal data class LoadedGallery(
     val selectedCategory: GalleryCategory,
     val response: GalleryImagesResponse,
-    val scannerFallback: Boolean,
 )
 
-internal suspend fun loadGalleryWithRawFallback(
+internal suspend fun loadGallery(
     token: String,
     category: GalleryCategory,
     repository: GalleryRepository,
 ): LoadedGallery =
-    runCatching {
-        repository.list(token, category)
-    }.fold(
-        onSuccess = { response ->
-            LoadedGallery(
-                selectedCategory = category,
-                response = response,
-                scannerFallback = false,
-            )
-        },
-        onFailure = { error ->
-            throwIfCancellation(error)
-            if (category == GalleryCategory.Raw) {
-                throw error
-            }
-            LoadedGallery(
-                selectedCategory = category,
-                response = repository.list(token, GalleryCategory.Raw),
-                scannerFallback = true,
-            )
-        },
+    LoadedGallery(
+        selectedCategory = category,
+        response = repository.list(token, category),
     )
 
 internal fun galleryStateForRefreshStart(
@@ -596,18 +577,6 @@ private fun throwIfCancellation(error: Throwable) {
     }
 }
 
-private fun galleryStatusText(loaded: LoadedGallery): String =
-    galleryStatusText(
-        itemCount = loaded.response.items.size,
-        scannerFallback = loaded.scannerFallback,
-    )
+private fun galleryStatusText(loaded: LoadedGallery): String = galleryStatusText(itemCount = loaded.response.items.size)
 
-internal fun galleryStatusText(
-    itemCount: Int,
-    scannerFallback: Boolean,
-): String =
-    if (scannerFallback) {
-        "Showing $itemCount raw image(s)"
-    } else {
-        "$itemCount image(s)"
-    }
+internal fun galleryStatusText(itemCount: Int): String = "$itemCount image(s)"
