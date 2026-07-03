@@ -30,8 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tradingcards.uploader.R
 import com.tradingcards.uploader.model.UploadEntity
 import com.tradingcards.uploader.model.UploadStatus
 import com.tradingcards.uploader.ui.theme.LocalStatusPalette
@@ -97,7 +99,7 @@ private fun Header(
                 .padding(top = 16.dp, bottom = 4.dp),
     ) {
         Text(
-            "Your cards",
+            stringResource(R.string.capture_title),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.weight(FULL_WEIGHT),
@@ -120,7 +122,7 @@ private fun Header(
                                 .background(LocalStatusPalette.current.success),
                     )
                     Text(
-                        "Signed in",
+                        stringResource(R.string.capture_signed_in),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -129,7 +131,7 @@ private fun Header(
                 }
             }
         } else {
-            TextButton(onClick = onAuthenticate) { Text("Sign in") }
+            TextButton(onClick = onAuthenticate) { Text(stringResource(R.string.capture_sign_in)) }
         }
     }
 }
@@ -162,9 +164,24 @@ private fun SummaryRow(uploads: List<UploadEntity>) {
                 .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SummaryStat("Uploaded", uploaded, MaterialTheme.colorScheme.onSurface, Modifier.weight(FULL_WEIGHT))
-        SummaryStat("Uploading", uploading, MaterialTheme.colorScheme.primary, Modifier.weight(FULL_WEIGHT))
-        SummaryStat("Failed", failed, MaterialTheme.colorScheme.error, Modifier.weight(FULL_WEIGHT))
+        SummaryStat(
+            stringResource(R.string.capture_summary_uploaded),
+            uploaded,
+            MaterialTheme.colorScheme.onSurface,
+            Modifier.weight(FULL_WEIGHT),
+        )
+        SummaryStat(
+            stringResource(R.string.capture_summary_uploading),
+            uploading,
+            MaterialTheme.colorScheme.primary,
+            Modifier.weight(FULL_WEIGHT),
+        )
+        SummaryStat(
+            stringResource(R.string.capture_summary_failed),
+            failed,
+            MaterialTheme.colorScheme.error,
+            Modifier.weight(FULL_WEIGHT),
+        )
     }
 }
 
@@ -207,7 +224,7 @@ private fun UploadList(
 ) {
     Column(modifier = modifier) {
         Text(
-            "Recent",
+            stringResource(R.string.capture_recent_heading),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
@@ -250,7 +267,7 @@ private fun UploadRow(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(FULL_WEIGHT)) {
                 Text(
-                    "Card photo",
+                    stringResource(R.string.capture_row_title),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -278,7 +295,7 @@ private fun UploadRow(
             }
             Spacer(Modifier.width(12.dp))
             if (ui.canRetry) {
-                TextButton(onClick = { onRetry(upload) }) { Text("Retry") }
+                TextButton(onClick = { onRetry(upload) }) { Text(stringResource(R.string.capture_retry)) }
             } else {
                 StatusPill(ui)
             }
@@ -326,13 +343,13 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            "Capture your first card",
+            stringResource(R.string.capture_empty_title),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Cards you capture or pick from Photos upload automatically and show up here.",
+            stringResource(R.string.capture_empty_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -362,7 +379,11 @@ private fun ActionBar(
                     .height(54.dp),
         ) {
             Text(
-                if (signedIn) "Capture card" else "Sign in to upload",
+                if (signedIn) {
+                    stringResource(R.string.capture_action_capture)
+                } else {
+                    stringResource(R.string.capture_action_sign_in)
+                },
                 style = MaterialTheme.typography.titleMedium,
             )
         }
@@ -370,7 +391,7 @@ private fun ActionBar(
             onClick = onSelectPhoto,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Upload from Photos")
+            Text(stringResource(R.string.capture_action_select_photo))
         }
     }
 }
