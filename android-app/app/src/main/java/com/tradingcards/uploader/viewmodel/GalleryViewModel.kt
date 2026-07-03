@@ -72,6 +72,10 @@ class GalleryViewModel(
         _state.value = current.copy(selectedNames = selected)
     }
 
+    fun onClearSelection() {
+        _state.value = _state.value.copy(selectedNames = emptySet())
+    }
+
     fun onDeleteSelected(activity: Activity) {
         runAction(
             activity = activity,
@@ -154,7 +158,7 @@ class GalleryViewModel(
         val individualImages =
             imageAction?.let { selectedGalleryIndividualDeleteImages(current.items, current.selectedNames) }.orEmpty()
         if (sourceNames.isEmpty() && individualImages.isEmpty()) {
-            _state.value = current.copy(statusText = "Select raw or lineage-backed images")
+            _state.value = current.copy(errorText = "The selected images don't support this action")
             return
         }
         viewModelScope.launch {

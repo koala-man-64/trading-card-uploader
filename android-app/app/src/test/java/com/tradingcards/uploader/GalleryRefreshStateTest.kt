@@ -6,6 +6,7 @@ import com.tradingcards.uploader.model.GalleryImagesResponse
 import com.tradingcards.uploader.ui.GalleryUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -17,7 +18,7 @@ class GalleryRefreshStateTest {
                 category = GalleryCategory.Raw,
                 items = listOf(image("raw/a.jpg")),
                 selectedNames = setOf("raw/a.jpg"),
-                statusText = "1 image(s)",
+                errorText = "Couldn't load images: earlier failure",
                 accessToken = "old-token",
             )
         val loaded =
@@ -30,7 +31,7 @@ class GalleryRefreshStateTest {
 
         assertEquals(listOf("raw/a.jpg", "raw/b.jpg"), next.items.map { it.name })
         assertEquals(setOf("raw/a.jpg"), next.selectedNames)
-        assertEquals("2 image(s)", next.statusText)
+        assertNull(next.errorText)
         assertEquals("new-token", next.accessToken)
         assertFalse(next.loading)
     }
@@ -59,6 +60,7 @@ class GalleryRefreshStateTest {
                 category = GalleryCategory.Raw,
                 items = listOf(image("raw/a.jpg")),
                 selectedNames = setOf("raw/a.jpg"),
+                errorText = "Couldn't load images: earlier failure",
             )
 
         val next = galleryStateForRefreshStart(state, GalleryCategory.Processed, GalleryRefreshReason.Manual)
@@ -66,7 +68,17 @@ class GalleryRefreshStateTest {
         assertEquals(GalleryCategory.Processed, next.category)
         assertTrue(next.selectedNames.isEmpty())
         assertTrue(next.loading)
-        assertEquals("Loading processed images", next.statusText)
+        assertNull(next.errorText)
+    }
+
+    @Test
+    fun refreshFailureSurfacesErrorAndStopsLoading() {
+        val state = GalleryUiState(loading = true)
+
+        val next = galleryStateForRefreshFailure(state, GalleryRefreshReason.Manual, "boom")
+
+        assertFalse(next.loading)
+        assertEquals("Couldn't load images: boom", next.errorText)
     }
 
     @Test

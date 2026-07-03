@@ -20,7 +20,12 @@
     <string name="capture_action_sign_in">Sign in to upload</string>
     <string name="capture_action_select_photo">Upload from Photos</string>
 
-    <string name="gallery_title">Admin Gallery</string>
+    <string name="gallery_title">Gallery</string>
+    <string name="gallery_loading">Loading…</string>
+    <plurals name="gallery_image_count">
+        <item quantity="one">%1$d image</item>
+        <item quantity="other">%1$d images</item>
+    </plurals>
     <string name="gallery_category_raw">Raw</string>
     <string name="gallery_category_processed">Processed</string>
     <string name="gallery_category_segmented">Segmented</string>
@@ -29,9 +34,9 @@
     <string name="gallery_reprocess">Reprocess</string>
     <string name="gallery_cancel">Cancel</string>
     <string name="gallery_close">Close</string>
-    <string name="gallery_view">View</string>
-    <string name="gallery_no_lineage">No lineage</string>
-    <string name="gallery_preview_placeholder">Preview</string>
+    <string name="gallery_selected_count">%1$d selected</string>
+    <string name="gallery_clear_selection">Clear selection</string>
+    <string name="gallery_select_toggle">Select image</string>
     <string name="gallery_image_unavailable">Image unavailable</string>
     <string name="gallery_image_content_description">Card image %1$s</string>
     <string name="gallery_empty_title">No %1$s images yet</string>
