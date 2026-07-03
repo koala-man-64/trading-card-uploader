@@ -1,7 +1,12 @@
 package com.tradingcards.uploader.data
 
+import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import androidx.core.graphics.drawable.toBitmap
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import coil.size.Size
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.tradingcards.uploader.model.GalleryCategory
@@ -11,8 +16,6 @@ import com.tradingcards.uploader.model.GalleryImagesResponse
 import com.tradingcards.uploader.model.GallerySourceActionRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import retrofit2.Response
 import java.net.URI
 import java.net.URLEncoder
@@ -49,7 +52,6 @@ private data class GalleryErrorDetail(
 class GalleryRepository(
     private val apiBaseUrl: String,
     private val client: SasIssuerClient = SasIssuerClient.create(apiBaseUrl),
-    private val httpClient: OkHttpClient = OkHttpClient.Builder().build(),
 ) {
     suspend fun list(
         accessToken: String,
@@ -98,9 +100,19 @@ class GalleryRepository(
         )
     }
 
+    /**
+     * Loads a preview bitmap through Coil so repeated grid scrolls hit its
+     * memory/disk cache instead of re-fetching and re-decoding at full
+     * resolution every time. [targetSize] bounds the decode resolution
+     * (e.g. a small size for grid thumbnails, larger for a full-screen
+     * viewer) via [BitmapFactory] downsampling.
+     */
     suspend fun loadPreview(
+        context: Context,
+        imageLoader: ImageLoader,
         accessToken: String,
         image: GalleryImage,
+        targetSize: Size = Size.ORIGINAL,
     ): Bitmap? =
         withContext(Dispatchers.IO) {
             val urls =
@@ -109,27 +121,29 @@ class GalleryRepository(
                     runCatching { galleryImageEndpointUrl(apiBaseUrl, image) }.getOrNull(),
                 ).distinct()
             for (url in urls) {
-                runCatching { loadPreviewBitmap(accessToken, url) }
+                runCatching { loadPreviewBitmap(context, imageLoader, accessToken, url, targetSize) }
                     .getOrNull()
                     ?.let { return@withContext it }
             }
             null
         }
 
-    private fun loadPreviewBitmap(
+    private suspend fun loadPreviewBitmap(
+        context: Context,
+        imageLoader: ImageLoader,
         accessToken: String,
         url: String,
+        targetSize: Size,
     ): Bitmap? {
-        val requestBuilder = Request.Builder().url(url)
+        val requestBuilder =
+            ImageRequest.Builder(context)
+                .data(url)
+                .size(targetSize)
         if (shouldAttachGalleryBearer(apiBaseUrl, url)) {
-            requestBuilder.header("Authorization", bearer(accessToken))
+            requestBuilder.addHeader("Authorization", bearer(accessToken))
         }
-        httpClient.newCall(requestBuilder.build()).execute().use { response ->
-            if (!response.isSuccessful) {
-                return null
-            }
-            return response.body?.byteStream()?.use(BitmapFactory::decodeStream)
-        }
+        val result = imageLoader.execute(requestBuilder.build())
+        return (result as? SuccessResult)?.drawable?.toBitmap()
     }
 
     private fun bearer(accessToken: String) = "Bearer $accessToken"

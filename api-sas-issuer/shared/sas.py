@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,7 @@ from azure.storage.blob import (
     BlobServiceClient,
     ContainerClient,
     ContentSettings,
+    UserDelegationKey,
     generate_blob_sas,
 )
 
@@ -126,16 +128,50 @@ class StaticSasSigner:
         return self.sign(blob_name, expires_at)
 
 
+class UserDelegationKeyCache:
+    """Caches an Azure AD user delegation key so signing many blob SAS URLs in
+    the same request (or across warm invocations) costs at most one network
+    round trip, instead of one per blob."""
+
+    def __init__(
+        self,
+        service_client: BlobServiceClient,
+        validity: timedelta = timedelta(hours=1),
+        refresh_margin: timedelta = timedelta(minutes=20),
+    ) -> None:
+        self._service = service_client
+        self._validity = validity
+        self._refresh_margin = refresh_margin
+        self._lock = threading.Lock()
+        self._key: UserDelegationKey | None = None
+        self._expires_at = datetime.min.replace(tzinfo=UTC)
+
+    def get(self, now: datetime) -> UserDelegationKey:
+        with self._lock:
+            if self._key is None or now >= self._expires_at - self._refresh_margin:
+                start = now - timedelta(minutes=5)
+                expiry = now + self._validity
+                self._key = self._service.get_user_delegation_key(start, expiry)
+                self._expires_at = expiry
+            return self._key
+
+
 class UserDelegationSasSigner:
-    def __init__(self, service_client: BlobServiceClient, settings: Settings) -> None:
+    def __init__(
+        self,
+        service_client: BlobServiceClient,
+        settings: Settings,
+        key_cache: UserDelegationKeyCache | None = None,
+    ) -> None:
         self._service = service_client
         self._settings = settings
+        self._key_cache = key_cache or UserDelegationKeyCache(service_client)
         parsed = urlparse(settings.upload_storage_account_url)
         self._account_name = parsed.netloc.split(".")[0]
 
     def sign(self, blob_name: str, expires_at: datetime) -> str:
         starts_on = datetime.now(UTC) - timedelta(minutes=5)
-        delegation_key = self._service.get_user_delegation_key(starts_on, expires_at)
+        delegation_key = self._key_cache.get(datetime.now(UTC))
         sas = generate_blob_sas(
             account_name=self._account_name,
             container_name=self._settings.upload_container_name,
@@ -150,7 +186,7 @@ class UserDelegationSasSigner:
 
     def sign_read(self, blob_name: str, expires_at: datetime) -> str:
         starts_on = datetime.now(UTC) - timedelta(minutes=5)
-        delegation_key = self._service.get_user_delegation_key(starts_on, expires_at)
+        delegation_key = self._key_cache.get(datetime.now(UTC))
         sas = generate_blob_sas(
             account_name=self._account_name,
             container_name=self._settings.upload_container_name,
@@ -268,13 +304,18 @@ def ensure_container(service_client: BlobServiceClient, settings: Settings) -> C
     return container
 
 
-def build_issuer(settings: Settings) -> SasIssuer:
-    service_client = build_service_client(settings)
+def build_issuer(
+    settings: Settings,
+    *,
+    service_client: BlobServiceClient | None = None,
+    key_cache: UserDelegationKeyCache | None = None,
+) -> SasIssuer:
+    service_client = service_client or build_service_client(settings)
     container = ensure_container(service_client, settings)
     store = BlobIdempotencyStore(container, settings)
     signer: SasSigner
     if settings.sas_signer_mode == "connection_string":
         signer = ConnectionStringSasSigner(settings)
     else:
-        signer = UserDelegationSasSigner(service_client, settings)
+        signer = UserDelegationSasSigner(service_client, settings, key_cache)
     return SasIssuer(settings, store, signer)

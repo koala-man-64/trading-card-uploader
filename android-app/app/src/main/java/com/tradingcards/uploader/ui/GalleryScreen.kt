@@ -1,5 +1,6 @@
 package com.tradingcards.uploader.ui
 
+import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -37,10 +38,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import coil.ImageLoader
+import coil.size.Size
 import com.tradingcards.uploader.data.GalleryRepository
+import com.tradingcards.uploader.data.NetworkClients
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
 
@@ -49,9 +54,19 @@ private enum class PendingGalleryAction {
     Reprocess,
 }
 
+// Bounds decode resolution so BitmapFactory downsamples grid thumbnails
+// instead of decoding at full camera resolution on every load.
+private const val THUMBNAIL_TARGET_WIDTH_PX = 360
+private const val THUMBNAIL_TARGET_HEIGHT_PX = 480
+private const val VIEWER_TARGET_EDGE_PX = 1080
+private val THUMBNAIL_TARGET_SIZE = Size(THUMBNAIL_TARGET_WIDTH_PX, THUMBNAIL_TARGET_HEIGHT_PX)
+private val VIEWER_TARGET_SIZE = Size(VIEWER_TARGET_EDGE_PX, VIEWER_TARGET_EDGE_PX)
+
 private data class GalleryPreviewLoader(
     val accessToken: String?,
     val repository: GalleryRepository,
+    val context: Context,
+    val imageLoader: ImageLoader,
 )
 
 private data class GalleryPreviewCacheKey(
@@ -70,6 +85,7 @@ private data class GalleryPreviewOptions(
     val contentScale: ContentScale = ContentScale.Crop,
     val placeholder: String = "Preview",
     val initialBitmap: Bitmap? = null,
+    val targetSize: Size = THUMBNAIL_TARGET_SIZE,
 )
 
 @Suppress(
@@ -91,7 +107,14 @@ fun GalleryScreen(
 ) {
     var pendingAction by remember { mutableStateOf<PendingGalleryAction?>(null) }
     var viewingImage by remember { mutableStateOf<ViewedGalleryImage?>(null) }
-    val previewLoader = GalleryPreviewLoader(state.accessToken, repository)
+    val context = LocalContext.current
+    val previewLoader =
+        GalleryPreviewLoader(
+            accessToken = state.accessToken,
+            repository = repository,
+            context = context,
+            imageLoader = NetworkClients.imageLoader(context),
+        )
     val selectedCount = state.selectedNames.size
 
     Column(
@@ -302,7 +325,16 @@ private fun GalleryPreview(
         bitmap = null
         loading = accessToken != null
         attemptedPreviewUrl = image.previewUrl
-        val loaded = accessToken?.let { previewLoader.repository.loadPreview(it, image) }
+        val loaded =
+            accessToken?.let {
+                previewLoader.repository.loadPreview(
+                    context = previewLoader.context,
+                    imageLoader = previewLoader.imageLoader,
+                    accessToken = it,
+                    image = image,
+                    targetSize = options.targetSize,
+                )
+            }
         bitmap = loaded
         loaded?.let(onBitmapLoaded)
         loading = false
@@ -391,6 +423,7 @@ private fun GalleryImageViewerDialog(
                             contentScale = ContentScale.Fit,
                             placeholder = "Image unavailable",
                             initialBitmap = selection.bitmap,
+                            targetSize = VIEWER_TARGET_SIZE,
                         ),
                 )
                 Text(

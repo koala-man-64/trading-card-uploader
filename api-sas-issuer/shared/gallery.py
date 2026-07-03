@@ -10,12 +10,13 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from azure.core.exceptions import ResourceNotFoundError
-from azure.storage.blob import ContainerClient
+from azure.storage.blob import BlobServiceClient, ContainerClient
 
 from .config import Settings
 from .models import Claims, Problem
 from .sas import (
     ConnectionStringSasSigner,
+    UserDelegationKeyCache,
     UserDelegationSasSigner,
     build_service_client,
     ensure_container,
@@ -36,15 +37,24 @@ def require_gallery_admin(settings: Settings, claims: Claims) -> None:
     claims.require_admin(settings.admin_allowed_object_ids, settings.admin_allowed_roles)
 
 
-def build_container(settings: Settings) -> ContainerClient:
-    return ensure_container(build_service_client(settings), settings)
+def build_container(
+    settings: Settings,
+    *,
+    service_client: BlobServiceClient | None = None,
+) -> ContainerClient:
+    return ensure_container(service_client or build_service_client(settings), settings)
 
 
-def build_read_signer(settings: Settings) -> ConnectionStringSasSigner | UserDelegationSasSigner:
-    service_client = build_service_client(settings)
+def build_read_signer(
+    settings: Settings,
+    *,
+    service_client: BlobServiceClient | None = None,
+    key_cache: UserDelegationKeyCache | None = None,
+) -> ConnectionStringSasSigner | UserDelegationSasSigner:
+    service_client = service_client or build_service_client(settings)
     if settings.sas_signer_mode == "connection_string":
         return ConnectionStringSasSigner(settings)
-    return UserDelegationSasSigner(service_client, settings)
+    return UserDelegationSasSigner(service_client, settings, key_cache)
 
 
 def is_image_blob(blob_name: str) -> bool:
@@ -75,6 +85,9 @@ def list_raw_images(
     container: ContainerClient,
     limit: int,
     cursor: str | None,
+    *,
+    service_client: BlobServiceClient | None = None,
+    key_cache: UserDelegationKeyCache | None = None,
 ) -> dict[str, Any]:
     blobs = [
         blob
@@ -84,7 +97,7 @@ def list_raw_images(
     start = int(cursor) if cursor and cursor.isdigit() else 0
     page = blobs[start : start + limit]
     next_cursor = str(start + limit) if start + limit < len(blobs) else None
-    signer = build_read_signer(settings)
+    signer = build_read_signer(settings, service_client=service_client, key_cache=key_cache)
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.sas_ttl_minutes)
     items = []
     for blob in page:

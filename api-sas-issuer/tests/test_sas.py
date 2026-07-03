@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
+from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+import shared.sas as sas_module
 from shared.config import Settings
 from shared.models import Claims, Problem, UploadSasRequest
 from shared.sas import (
@@ -13,6 +15,7 @@ from shared.sas import (
     MemoryIdempotencyStore,
     SasIssuer,
     StaticSasSigner,
+    UserDelegationSasSigner,
     _blob_sas_url,
     _manifest_name,
     build_blob_name,
@@ -137,6 +140,30 @@ def test_issuer_rejects_idempotency_conflict() -> None:
         issuer.issue(request(size=8), claims(), datetime(2026, 6, 27, tzinfo=UTC))
 
     assert exc.value.status_code == 409
+
+
+class _FakeDelegationServiceClient:
+    def __init__(self) -> None:
+        self.delegation_key_calls = 0
+        self.url = "https://upload.blob.core.windows.net"
+
+    def get_user_delegation_key(self, start: datetime, expiry: datetime) -> object:
+        self.delegation_key_calls += 1
+        return object()
+
+
+def test_user_delegation_signer_reuses_cached_key_across_many_blobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sas_module, "generate_blob_sas", lambda **kwargs: "sig=test")
+    fake_service = _FakeDelegationServiceClient()
+    signer = UserDelegationSasSigner(cast(Any, fake_service), settings())
+    expires_at = datetime(2026, 6, 27, 18, 0, tzinfo=UTC)
+
+    for index in range(5):
+        signer.sign_read(f"raw/blob-{index}.jpg", expires_at)
+
+    assert fake_service.delegation_key_calls == 1
 
 
 def test_generated_sas_grants_create_write_only() -> None:

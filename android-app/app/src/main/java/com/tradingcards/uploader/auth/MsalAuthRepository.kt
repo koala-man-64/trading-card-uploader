@@ -125,20 +125,7 @@ class MsalAuthRepository(private val context: Context) {
             )
         }
 
-    private fun defaultAuthorityUrl(): String {
-        val config =
-            context.resources
-                .openRawResource(R.raw.msal_auth_config)
-                .bufferedReader()
-                .use { it.readText() }
-        val tenantId =
-            JSONObject(config)
-                .getJSONArray("authorities")
-                .getJSONObject(0)
-                .getJSONObject("audience")
-                .getString("tenant_id")
-        return "https://login.microsoftonline.com/$tenantId"
-    }
+    private fun defaultAuthorityUrl(): String = authorityUrl(context)
 
     private suspend fun existingAccount(app: ISingleAccountPublicClientApplication): IAccount? =
         suspendCancellableCoroutine { continuation ->
@@ -176,4 +163,33 @@ class MsalAuthRepository(private val context: Context) {
                 },
             )
         }
+
+    companion object {
+        // The raw MSAL config resource is static app content, so the parsed
+        // authority URL is identical for every instance/Context - cache it
+        // once instead of re-reading and re-parsing the resource file on
+        // every silent token acquisition.
+        @Volatile
+        private var cachedAuthorityUrl: String? = null
+
+        private fun authorityUrl(context: Context): String =
+            cachedAuthorityUrl ?: synchronized(this) {
+                cachedAuthorityUrl ?: parseAuthorityUrl(context).also { cachedAuthorityUrl = it }
+            }
+
+        private fun parseAuthorityUrl(context: Context): String {
+            val config =
+                context.resources
+                    .openRawResource(R.raw.msal_auth_config)
+                    .bufferedReader()
+                    .use { it.readText() }
+            val tenantId =
+                JSONObject(config)
+                    .getJSONArray("authorities")
+                    .getJSONObject(0)
+                    .getJSONObject("audience")
+                    .getString("tenant_id")
+            return "https://login.microsoftonline.com/$tenantId"
+        }
+    }
 }

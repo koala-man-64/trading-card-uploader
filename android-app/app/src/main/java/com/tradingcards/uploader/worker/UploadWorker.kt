@@ -5,10 +5,9 @@ import android.net.Uri
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.microsoft.identity.client.exception.MsalException
-import com.tradingcards.uploader.BuildConfig
 import com.tradingcards.uploader.auth.MsalAuthRepository
 import com.tradingcards.uploader.data.BlobUploader
-import com.tradingcards.uploader.data.SasIssuerClient
+import com.tradingcards.uploader.data.NetworkClients
 import com.tradingcards.uploader.data.UploadQueueDao
 import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.data.currentUploadContentLength
@@ -53,7 +52,7 @@ class UploadWorker(
             )
             val token = MsalAuthRepository(applicationContext).acquireUploadTokenSilent()
             val sasResponse =
-                SasIssuerClient.create(BuildConfig.API_BASE_URL).issueUploadSas(
+                NetworkClients.sasIssuerClient().issueUploadSas(
                     authorization = "Bearer $token",
                     request =
                         SasRequest(
@@ -117,7 +116,7 @@ class UploadWorker(
     ): Result {
         dao.updateStatus(uploadId, UploadStatus.Uploading, attempt, null, System.currentTimeMillis())
         val uploadResult =
-            BlobUploader(applicationContext).upload(
+            BlobUploader(applicationContext, NetworkClients.okHttpClient()).upload(
                 uri = blobUpload.uploadUri,
                 contentLengthBytes = blobUpload.contentLengthBytes,
                 uploadUrl = sas.uploadUrl,
