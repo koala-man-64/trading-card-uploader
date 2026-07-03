@@ -34,6 +34,9 @@ param adminAllowedRoles array = [
   'Gallery.Admin'
 ]
 param scannerAdminBaseUrl string = ''
+@minValue(1)
+@maxValue(60)
+param scannerTimeoutSeconds int = 30
 param logRetentionDays int = 30
 param appInsightsDailyCapGb int = 1
 param githubSmokePrincipalId string = ''
@@ -283,6 +286,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'SCANNER_ADMIN_BASE_URL'
           value: scannerAdminBaseUrl
+        }
+        {
+          name: 'SCANNER_TIMEOUT_SECONDS'
+          value: string(scannerTimeoutSeconds)
         }
         {
           name: 'UPLOAD_STORAGE_ACCOUNT_URL'

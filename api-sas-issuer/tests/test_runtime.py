@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from shared import runtime
+from shared.config import DEFAULT_SCANNER_TIMEOUT_SECONDS
 
 
 @pytest.fixture(autouse=True)
@@ -32,6 +33,23 @@ def test_get_settings_is_a_process_scope_singleton(monkeypatch: pytest.MonkeyPat
     second = runtime.get_settings()
 
     assert first is second
+
+
+def test_get_settings_uses_default_scanner_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_required_env(monkeypatch)
+
+    settings = runtime.get_settings()
+
+    assert settings.scanner_timeout_seconds == DEFAULT_SCANNER_TIMEOUT_SECONDS
+
+
+def test_get_settings_reads_scanner_timeout_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("SCANNER_TIMEOUT_SECONDS", "45")
+
+    settings = runtime.get_settings()
+
+    assert settings.scanner_timeout_seconds == 45
 
 
 def test_get_jwt_validator_reuses_settings_singleton(monkeypatch: pytest.MonkeyPatch) -> None:

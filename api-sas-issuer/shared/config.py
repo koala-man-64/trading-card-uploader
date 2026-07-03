@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 
 DEFAULT_AZURE_STORAGE_API_VERSION = "2021-08-06"
+DEFAULT_SCANNER_TIMEOUT_SECONDS = 30
 
 
 def _csv(value: str | None) -> tuple[str, ...]:
@@ -42,7 +43,7 @@ class Settings:
     admin_allowed_object_ids: tuple[str, ...] = ()
     admin_allowed_roles: tuple[str, ...] = ("Gallery.Admin",)
     scanner_admin_base_url: str = ""
-    scanner_timeout_seconds: int = 10
+    scanner_timeout_seconds: int = DEFAULT_SCANNER_TIMEOUT_SECONDS
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -78,7 +79,7 @@ class Settings:
             admin_allowed_object_ids=_csv(os.getenv("ADMIN_ALLOWED_OBJECT_IDS")),
             admin_allowed_roles=_csv(os.getenv("ADMIN_ALLOWED_ROLES")) or ("Gallery.Admin",),
             scanner_admin_base_url=os.getenv("SCANNER_ADMIN_BASE_URL", "").strip().rstrip("/"),
-            scanner_timeout_seconds=_int_env("SCANNER_TIMEOUT_SECONDS", 10),
+            scanner_timeout_seconds=_int_env("SCANNER_TIMEOUT_SECONDS", DEFAULT_SCANNER_TIMEOUT_SECONDS),
         )
         settings.validate()
         return settings

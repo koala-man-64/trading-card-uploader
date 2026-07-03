@@ -16,6 +16,7 @@ from shared.gallery import (
     list_raw_images,
     require_gallery_admin,
     require_raw_image_blob_name,
+    scanner_request,
 )
 from shared.models import Claims, Problem
 from shared.sas import ConnectionStringSasSigner
@@ -155,6 +156,30 @@ def test_raw_gallery_list_paginates_and_filters_images() -> None:
     assert payload["nextCursor"] == "1"
     assert payload["items"][0]["name"] == "raw/a.jpg"
     assert "sig=" in payload["items"][0]["previewUrl"]
+
+
+def test_scanner_request_maps_timeout_to_problem(monkeypatch: pytest.MonkeyPatch) -> None:
+    def timed_out(*_args: object, **_kwargs: object) -> object:
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(gallery_module, "urlopen", timed_out)
+    configured = replace(
+        settings(),
+        scanner_admin_base_url="https://scanner.example.test",
+        scanner_timeout_seconds=30,
+    )
+
+    with pytest.raises(Problem) as exc:
+        scanner_request(
+            configured,
+            "Bearer token",
+            "GET",
+            "/api/v1/admin/gallery/images?category=processed&limit=50",
+        )
+
+    assert exc.value.status_code == 504
+    assert exc.value.code == "scanner_timeout"
+    assert exc.value.message == "Scanner gallery request timed out after 30 seconds"
 
 
 def test_gallery_preview_sas_is_read_only() -> None:

@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -160,6 +160,20 @@ def scanner_request(
             headers=dict(exc.headers.items()),
             body=exc.read(),
         )
+    except TimeoutError as exc:
+        raise scanner_timeout(settings) from exc
+    except URLError as exc:
+        if isinstance(exc.reason, TimeoutError):
+            raise scanner_timeout(settings) from exc
+        raise
+
+
+def scanner_timeout(settings: Settings) -> Problem:
+    return Problem(
+        504,
+        "scanner_timeout",
+        f"Scanner gallery request timed out after {settings.scanner_timeout_seconds} seconds",
+    )
 
 
 def scanner_json(
