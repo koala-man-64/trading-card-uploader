@@ -13,6 +13,7 @@
     "ADMIN_ALLOWED_OBJECT_IDS": "",
     "ADMIN_ALLOWED_ROLES": "Gallery.Admin",
     "SCANNER_ADMIN_BASE_URL": "http://127.0.0.1:7072",
+    "SCANNER_TIMEOUT_SECONDS": "30",
     "ALLOWED_ANDROID_CLIENT_IDS": "",
     "UPLOAD_STORAGE_ACCOUNT_URL": "http://127.0.0.1:10000/devstoreaccount1",
     "UPLOAD_CONTAINER_NAME": "card-uploads",

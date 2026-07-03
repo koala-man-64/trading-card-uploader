@@ -106,6 +106,7 @@ Write-only SAS behavior is proven by the Function unit tests so the app and smok
 - If SAS issuance returns 401 or 403, verify `ANDROID_API_SCOPE`, API app consent, and `ALLOWED_ANDROID_CLIENT_IDS`.
 - If gallery load returns `admin_not_allowed` or HTTP 403, verify `ADMIN_ALLOWED_OBJECT_IDS` contains the signed-in user's Entra object ID, then redeploy dev infra and the Function App.
 - If processed or segmented gallery load returns `scanner_not_configured`, set `SCANNER_ADMIN_BASE_URL`, rerun `infra-ci` with `deployDev=true`, then redeploy the Function App if app settings were refreshed.
+- If processed or segmented gallery load returns `scanner_timeout`, verify the scanner Function is running and keep `SCANNER_TIMEOUT_SECONDS` high enough for scanner cold starts.
 - If the app stays in retry or failed state, inspect the displayed last error and correlate with Function/App Insights traces by upload ID.
 - If `phone-apk` fails validation, replace the placeholder or missing GitHub environment value named in the workflow log.
 - If `phone-apk` reports a signing hash mismatch, rerun `Initialize-DevPhoneEnvironment.ps1` with the same `.local/phone-dev/` keystore or update the Entra Android redirect URI to the current hash.
