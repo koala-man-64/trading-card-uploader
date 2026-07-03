@@ -39,7 +39,7 @@ internal fun galleryStateForRefreshStart(
         GalleryRefreshReason.Action ->
             state.copy(
                 loading = true,
-                statusText = "Applying action",
+                errorText = null,
             )
         GalleryRefreshReason.Initial,
         GalleryRefreshReason.Category,
@@ -49,7 +49,7 @@ internal fun galleryStateForRefreshStart(
                 category = category,
                 loading = true,
                 selectedNames = emptySet(),
-                statusText = "Loading ${category.wireValue} images",
+                errorText = null,
             )
     }
 
@@ -66,18 +66,12 @@ internal fun galleryStateForRefreshSuccess(
         } else {
             emptySet()
         }
-    val statusText =
-        if (reason == GalleryRefreshReason.Action) {
-            "Action complete"
-        } else {
-            galleryStatusText(loaded)
-        }
     return state.copy(
         category = loaded.selectedCategory,
         items = loaded.response.items,
         selectedNames = selectedNames,
         loading = false,
-        statusText = statusText,
+        errorText = null,
         accessToken = token,
     )
 }
@@ -92,7 +86,7 @@ internal fun galleryStateForRefreshFailure(
         GalleryRefreshReason.Action ->
             state.copy(
                 loading = false,
-                statusText = "Action failed: ${message ?: "unknown error"}",
+                errorText = "Action failed: ${message ?: "unknown error"}",
             )
         GalleryRefreshReason.Initial,
         GalleryRefreshReason.Category,
@@ -100,7 +94,7 @@ internal fun galleryStateForRefreshFailure(
         ->
             state.copy(
                 loading = false,
-                statusText = "Gallery load failed: ${message ?: "unknown error"}",
+                errorText = "Couldn't load images: ${message ?: "unknown error"}",
             )
     }
 
@@ -109,7 +103,3 @@ internal fun throwIfCancellation(error: Throwable) {
         throw error
     }
 }
-
-private fun galleryStatusText(loaded: LoadedGallery): String = galleryStatusText(itemCount = loaded.response.items.size)
-
-internal fun galleryStatusText(itemCount: Int): String = "$itemCount image(s)"

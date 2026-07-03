@@ -250,6 +250,7 @@ private fun GalleryRoute(
         onCategorySelected = { viewModel.onCategorySelected(activity, it) },
         onRefresh = { viewModel.onRefresh(activity) },
         onToggleSelected = viewModel::onToggleSelected,
+        onClearSelection = viewModel::onClearSelection,
         onDeleteSelected = { viewModel.onDeleteSelected(activity) },
         onReprocessSelected = { viewModel.onReprocessSelected(activity) },
     )
@@ -258,7 +259,7 @@ private fun GalleryRoute(
 @Composable
 private fun rememberGalleryPhotoLauncher(
     repository: UploadRepository,
-    onQueued: (String) -> Unit,
+    onQueued: () -> Unit,
     onCancelled: () -> Unit,
     onFailed: (String) -> Unit,
 ): ActivityResultLauncher<PickVisualMediaRequest> {
@@ -270,7 +271,7 @@ private fun rememberGalleryPhotoLauncher(
         }
         scope.launch {
             runCatching { repository.enqueueSelectedPhoto(selectedUri) }
-                .onSuccess { uploadId -> onQueued(uploadId) }
+                .onSuccess { onQueued() }
                 .onFailure { error -> onFailed(error.message ?: "unable to queue photo") }
         }
     }
@@ -281,7 +282,7 @@ private fun rememberTakePictureLauncher(
     pendingCapture: PendingCapture?,
     clearPendingCapture: () -> Unit,
     repository: UploadRepository,
-    onQueued: (String) -> Unit,
+    onQueued: () -> Unit,
     onCancelled: () -> Unit,
 ): ActivityResultLauncher<Uri> {
     val scope = rememberCoroutineScope()
@@ -301,15 +302,14 @@ private fun enqueueCapture(
     capture: PendingCapture,
     repository: UploadRepository,
     scope: CoroutineScope,
-    onQueued: (String) -> Unit,
+    onQueued: () -> Unit,
 ) {
     scope.launch {
-        val uploadId =
-            repository.enqueue(
-                localUri = capture.uri.toString(),
-                contentLengthBytes = capture.file.length(),
-            )
-        onQueued(uploadId)
+        repository.enqueue(
+            localUri = capture.uri.toString(),
+            contentLengthBytes = capture.file.length(),
+        )
+        onQueued()
     }
 }
 

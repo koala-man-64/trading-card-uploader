@@ -1,51 +1,45 @@
 package com.tradingcards.uploader.ui
 
-import android.content.Context
-import android.graphics.Bitmap
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import coil.ImageLoader
-import coil.size.Size
 import com.tradingcards.uploader.R
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.data.NetworkClients
@@ -57,40 +51,7 @@ private enum class PendingGalleryAction {
     Reprocess,
 }
 
-// Bounds decode resolution so BitmapFactory downsamples grid thumbnails
-// instead of decoding at full camera resolution on every load.
-private const val SKELETON_TILE_COUNT = 6
-private const val THUMBNAIL_TARGET_WIDTH_PX = 360
-private const val THUMBNAIL_TARGET_HEIGHT_PX = 480
-private const val VIEWER_TARGET_EDGE_PX = 1080
-private val THUMBNAIL_TARGET_SIZE = Size(THUMBNAIL_TARGET_WIDTH_PX, THUMBNAIL_TARGET_HEIGHT_PX)
-private val VIEWER_TARGET_SIZE = Size(VIEWER_TARGET_EDGE_PX, VIEWER_TARGET_EDGE_PX)
-
-private data class GalleryPreviewLoader(
-    val accessToken: String?,
-    val repository: GalleryRepository,
-    val context: Context,
-    val imageLoader: ImageLoader,
-)
-
-private data class GalleryPreviewCacheKey(
-    val name: String,
-    val lastModifiedUtc: String?,
-    val size: Long,
-    val accessToken: String?,
-)
-
-private data class ViewedGalleryImage(
-    val image: GalleryImage,
-    val bitmap: Bitmap?,
-)
-
-private data class GalleryPreviewOptions(
-    val contentScale: ContentScale = ContentScale.Crop,
-    val placeholder: String = "Preview",
-    val initialBitmap: Bitmap? = null,
-    val targetSize: Size = THUMBNAIL_TARGET_SIZE,
-)
+private const val SKELETON_TILE_COUNT = 9
 
 @Suppress(
     "FunctionNaming",
@@ -106,6 +67,7 @@ fun GalleryScreen(
     onCategorySelected: (GalleryCategory) -> Unit,
     onRefresh: () -> Unit,
     onToggleSelected: (GalleryImage) -> Unit,
+    onClearSelection: () -> Unit,
     onDeleteSelected: () -> Unit,
     onReprocessSelected: () -> Unit,
 ) {
@@ -125,43 +87,36 @@ fun GalleryScreen(
         modifier =
             modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.gallery_title), style = MaterialTheme.typography.headlineSmall)
-        CategoryTabs(state.category, onCategorySelected)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onRefresh, enabled = !state.loading) {
-                Text(stringResource(R.string.gallery_refresh))
-            }
-            OutlinedButton(
-                onClick = { pendingAction = PendingGalleryAction.Delete },
-                enabled = selectedCount > 0 && !state.loading,
-            ) {
-                Text(stringResource(R.string.gallery_delete))
-            }
-            OutlinedButton(
-                onClick = { pendingAction = PendingGalleryAction.Reprocess },
-                enabled = selectedCount > 0 && !state.loading,
-            ) {
-                Text(stringResource(R.string.gallery_reprocess))
-            }
+        GalleryHeader(state, onRefresh)
+        CategorySelector(state.category, enabled = !state.loading, onCategorySelected)
+        state.errorText?.let { ErrorNotice(it) }
+        if (selectedCount > 0) {
+            SelectionBar(
+                selectedCount = selectedCount,
+                enabled = !state.loading,
+                onReprocess = { pendingAction = PendingGalleryAction.Reprocess },
+                onDelete = { pendingAction = PendingGalleryAction.Delete },
+                onClear = onClearSelection,
+            )
         }
-        Text(state.statusText, style = MaterialTheme.typography.bodyMedium)
         when {
             state.loading && state.items.isEmpty() -> GallerySkeletonGrid()
             state.items.isEmpty() -> GalleryEmptyState(state.category, onRefresh)
             else ->
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(150.dp),
+                    columns = GridCells.Adaptive(110.dp),
                     modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(state.items, key = { it.name }) { image ->
-                        GalleryImageCard(
+                        GalleryImageTile(
                             image = image,
                             selected = image.name in state.selectedNames,
+                            selectionActive = selectedCount > 0,
                             previewLoader = previewLoader,
                             onToggleSelected = { onToggleSelected(image) },
                             onViewImage = { bitmap ->
@@ -174,44 +129,18 @@ fun GalleryScreen(
     }
 
     pendingAction?.let { action ->
-        val itemWord =
-            if (selectedCount == 1) {
-                stringResource(R.string.gallery_item_singular)
-            } else {
-                stringResource(R.string.gallery_item_plural)
-            }
-        val isDelete = action == PendingGalleryAction.Delete
-        AlertDialog(
-            onDismissRequest = { pendingAction = null },
-            title = {
-                val titleRes =
-                    if (isDelete) R.string.gallery_confirm_title_delete else R.string.gallery_confirm_title_reprocess
-                Text(stringResource(titleRes, selectedCount, itemWord))
-            },
-            text = {
-                val bodyRes =
-                    if (isDelete) R.string.gallery_confirm_body_delete else R.string.gallery_confirm_body_reprocess
-                Text(stringResource(bodyRes, itemWord))
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pendingAction = null
-                        if (isDelete) {
-                            onDeleteSelected()
-                        } else {
-                            onReprocessSelected()
-                        }
-                    },
-                ) {
-                    Text(stringResource(if (isDelete) R.string.gallery_delete else R.string.gallery_reprocess))
+        GalleryConfirmDialog(
+            action = action,
+            selectedCount = selectedCount,
+            onConfirm = {
+                pendingAction = null
+                if (action == PendingGalleryAction.Delete) {
+                    onDeleteSelected()
+                } else {
+                    onReprocessSelected()
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { pendingAction = null }) {
-                    Text(stringResource(R.string.gallery_cancel))
-                }
-            },
+            onDismiss = { pendingAction = null },
         )
     }
 
@@ -226,21 +155,85 @@ fun GalleryScreen(
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
-private fun CategoryTabs(
+private fun GalleryHeader(
+    state: GalleryUiState,
+    onRefresh: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.gallery_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            val subtitle =
+                if (state.loading && state.items.isEmpty()) {
+                    stringResource(R.string.gallery_loading)
+                } else {
+                    pluralStringResource(R.plurals.gallery_image_count, state.items.size, state.items.size)
+                }
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onRefresh, enabled = !state.loading) {
+            Icon(
+                Icons.Default.Refresh,
+                contentDescription = stringResource(R.string.gallery_refresh),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun CategorySelector(
     selected: GalleryCategory,
+    enabled: Boolean,
     onCategorySelected: (GalleryCategory) -> Unit,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GalleryCategory.entries.forEach { category ->
-            val active = category == selected
-            val buttonText = categoryLabel(category)
-            if (active) {
-                Button(onClick = { onCategorySelected(category) }) {
-                    Text(buttonText)
-                }
-            } else {
-                OutlinedButton(onClick = { onCategorySelected(category) }) {
-                    Text(buttonText)
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = CircleShape,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.padding(4.dp)) {
+            GalleryCategory.entries.forEach { category ->
+                val active = category == selected
+                Surface(
+                    color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    shape = CircleShape,
+                    border = if (active) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .clip(CircleShape)
+                            .clickable(enabled = enabled) { onCategorySelected(category) },
+                ) {
+                    Text(
+                        categoryLabel(category),
+                        style = MaterialTheme.typography.labelLarge,
+                        color =
+                            if (active) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        textAlign = TextAlign.Center,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                    )
                 }
             }
         }
@@ -257,18 +250,83 @@ private fun categoryLabel(category: GalleryCategory): String =
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
+private fun ErrorNotice(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        )
+    }
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun SelectionBar(
+    selectedCount: Int,
+    enabled: Boolean,
+    onReprocess: () -> Unit,
+    onDelete: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 14.dp, end = 4.dp),
+        ) {
+            Text(
+                stringResource(R.string.gallery_selected_count, selectedCount),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onReprocess, enabled = enabled) {
+                Text(stringResource(R.string.gallery_reprocess))
+            }
+            TextButton(
+                onClick = onDelete,
+                enabled = enabled,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) {
+                Text(stringResource(R.string.gallery_delete))
+            }
+            IconButton(onClick = onClear) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = stringResource(R.string.gallery_clear_selection),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
 private fun GallerySkeletonGrid() {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(150.dp),
+        columns = GridCells.Adaptive(110.dp),
         modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(SKELETON_TILE_COUNT) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().height(180.dp),
+                shape = TileShape,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(TILE_ASPECT_RATIO),
             ) {}
         }
     }
@@ -281,7 +339,7 @@ private fun GalleryEmptyState(
     onRefresh: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(top = 32.dp),
+        modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -294,6 +352,7 @@ private fun GalleryEmptyState(
             stringResource(R.string.gallery_empty_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
         OutlinedButton(onClick = onRefresh) {
@@ -304,204 +363,40 @@ private fun GalleryEmptyState(
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
-private fun GalleryImageCard(
-    image: GalleryImage,
-    selected: Boolean,
-    previewLoader: GalleryPreviewLoader,
-    onToggleSelected: () -> Unit,
-    onViewImage: (Bitmap?) -> Unit,
-) {
-    val previewKey = galleryPreviewCacheKey(image, previewLoader.accessToken)
-    var previewBitmap by remember(previewKey) { mutableStateOf<Bitmap?>(null) }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggleSelected),
-    ) {
-        Box {
-            GalleryPreview(
-                image = image,
-                previewLoader = previewLoader,
-                onBitmapLoaded = { previewBitmap = it },
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
-                options = GalleryPreviewOptions(placeholder = stringResource(R.string.gallery_preview_placeholder)),
-            )
-            Checkbox(
-                checked = selected,
-                onCheckedChange = { onToggleSelected() },
-                modifier = Modifier.align(Alignment.TopEnd),
-            )
-        }
-        Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                image.name.substringAfterLast("/"),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                image.sourceBlobName ?: stringResource(R.string.gallery_no_lineage),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                TextButton(onClick = { onViewImage(previewBitmap) }) {
-                    Text(stringResource(R.string.gallery_view))
-                }
-            }
-        }
-    }
-}
-
-@Suppress("FunctionNaming", "ktlint:standard:function-naming")
-@Composable
-private fun GalleryPreview(
-    image: GalleryImage,
-    previewLoader: GalleryPreviewLoader,
-    onBitmapLoaded: (Bitmap) -> Unit = {},
-    modifier: Modifier = Modifier,
-    options: GalleryPreviewOptions = GalleryPreviewOptions(),
-) {
-    val accessToken = previewLoader.accessToken
-    val previewKey = galleryPreviewCacheKey(image, accessToken)
-    var bitmap by remember(previewKey) { mutableStateOf(options.initialBitmap) }
-    var loading by remember(previewKey) { mutableStateOf(false) }
-    var attemptedPreviewUrl by remember(previewKey) { mutableStateOf<String?>(null) }
-    LaunchedEffect(previewKey, image.previewUrl) {
-        if (bitmap != null) {
-            loading = false
-            return@LaunchedEffect
-        }
-        if (attemptedPreviewUrl == image.previewUrl) {
-            return@LaunchedEffect
-        }
-        bitmap = null
-        loading = accessToken != null
-        attemptedPreviewUrl = image.previewUrl
-        val loaded =
-            accessToken?.let {
-                previewLoader.repository.loadPreview(
-                    context = previewLoader.context,
-                    imageLoader = previewLoader.imageLoader,
-                    accessToken = it,
-                    image = image,
-                    targetSize = options.targetSize,
-                )
-            }
-        bitmap = loaded
-        loaded?.let(onBitmapLoaded)
-        loading = false
-    }
-    Box(
-        modifier =
-            modifier.background(
-                MaterialTheme.colorScheme.surfaceVariant,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        val currentBitmap = bitmap
-        if (currentBitmap == null) {
-            if (loading) {
-                CircularProgressIndicator(modifier = Modifier.size(28.dp))
-            } else {
-                Text(options.placeholder)
-            }
-        } else {
-            Image(
-                bitmap = currentBitmap.asImageBitmap(),
-                contentDescription =
-                    stringResource(R.string.gallery_image_content_description, image.name.substringAfterLast("/")),
-                contentScale = options.contentScale,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-    }
-}
-
-private fun galleryPreviewCacheKey(
-    image: GalleryImage,
-    accessToken: String?,
-): GalleryPreviewCacheKey =
-    GalleryPreviewCacheKey(
-        name = image.name,
-        lastModifiedUtc = image.lastModifiedUtc,
-        size = image.size,
-        accessToken = accessToken,
-    )
-
-@Suppress("FunctionNaming", "ktlint:standard:function-naming")
-@Composable
-private fun GalleryImageViewerDialog(
-    selection: ViewedGalleryImage,
-    previewLoader: GalleryPreviewLoader,
+private fun GalleryConfirmDialog(
+    action: PendingGalleryAction,
+    selectedCount: Int,
+    onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val image = selection.image
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        image.name.substringAfterLast("/"),
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.gallery_close))
-                    }
-                }
-                GalleryPreview(
-                    image = image,
-                    previewLoader = previewLoader,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 240.dp, max = 560.dp),
-                    options =
-                        GalleryPreviewOptions(
-                            contentScale = ContentScale.Fit,
-                            placeholder = stringResource(R.string.gallery_image_unavailable),
-                            initialBitmap = selection.bitmap,
-                            targetSize = VIEWER_TARGET_SIZE,
-                        ),
-                )
-                Text(
-                    image.sourceBlobName ?: image.name,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+    val itemWord =
+        if (selectedCount == 1) {
+            stringResource(R.string.gallery_item_singular)
+        } else {
+            stringResource(R.string.gallery_item_plural)
         }
-    }
+    val isDelete = action == PendingGalleryAction.Delete
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            val titleRes =
+                if (isDelete) R.string.gallery_confirm_title_delete else R.string.gallery_confirm_title_reprocess
+            Text(stringResource(titleRes, selectedCount, itemWord))
+        },
+        text = {
+            val bodyRes =
+                if (isDelete) R.string.gallery_confirm_body_delete else R.string.gallery_confirm_body_reprocess
+            Text(stringResource(bodyRes, itemWord))
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(if (isDelete) R.string.gallery_delete else R.string.gallery_reprocess))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.gallery_cancel))
+            }
+        },
+    )
 }

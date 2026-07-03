@@ -139,7 +139,7 @@ private fun Header(
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 private fun StatusCaption(statusText: String) {
-    if (statusText.isBlank() || statusText == "Ready") return
+    if (statusText.isBlank()) return
     Text(
         statusText,
         style = MaterialTheme.typography.bodySmall,

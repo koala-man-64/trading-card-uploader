@@ -25,7 +25,7 @@ class CaptureViewModel(
             initialValue = emptyList(),
         )
 
-    private val _statusText = MutableStateFlow("Ready")
+    private val _statusText = MutableStateFlow("")
     val statusText: StateFlow<String> = _statusText
 
     private val _signedIn = MutableStateFlow(false)
@@ -42,8 +42,8 @@ class CaptureViewModel(
             runCatching { authRepository.acquireUploadToken(activity) }
                 .onSuccess {
                     _signedIn.value = true
-                    _statusText.value = "Authenticated"
-                }.onFailure { _statusText.value = "Authentication failed: ${it.message}" }
+                    _statusText.value = ""
+                }.onFailure { _statusText.value = "Sign-in failed: ${it.message ?: "unknown error"}" }
         }
     }
 
@@ -58,12 +58,12 @@ class CaptureViewModel(
         }
     }
 
-    fun onCaptureQueued(uploadId: String) {
-        _statusText.value = "Upload queued: $uploadId"
+    fun onCaptureQueued() {
+        _statusText.value = ""
     }
 
     fun onCaptureCancelled() {
-        _statusText.value = "Capture cancelled"
+        _statusText.value = ""
     }
 
     fun onCaptureFailed(message: String) {
@@ -74,15 +74,15 @@ class CaptureViewModel(
         _statusText.value = "Camera permission is required to capture a card photo"
     }
 
-    fun onGalleryPhotoQueued(uploadId: String) {
-        _statusText.value = "Gallery photo queued: $uploadId"
+    fun onGalleryPhotoQueued() {
+        _statusText.value = ""
     }
 
     fun onGalleryPhotoCancelled() {
-        _statusText.value = "Gallery selection cancelled"
+        _statusText.value = ""
     }
 
     fun onGalleryPhotoFailed(message: String) {
-        _statusText.value = "Gallery photo failed: $message"
+        _statusText.value = "Couldn't add photo: $message"
     }
 }

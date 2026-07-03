@@ -8,6 +8,6 @@ data class GalleryUiState(
     val items: List<GalleryImage> = emptyList(),
     val selectedNames: Set<String> = emptySet(),
     val loading: Boolean = false,
-    val statusText: String = "Ready",
+    val errorText: String? = null,
     val accessToken: String? = null,
 )
