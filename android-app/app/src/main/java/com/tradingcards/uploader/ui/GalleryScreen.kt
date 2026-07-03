@@ -2,6 +2,7 @@ package com.tradingcards.uploader.ui
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,11 +19,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -39,11 +40,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.ImageLoader
 import coil.size.Size
+import com.tradingcards.uploader.R
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.data.NetworkClients
 import com.tradingcards.uploader.model.GalleryCategory
@@ -56,6 +59,7 @@ private enum class PendingGalleryAction {
 
 // Bounds decode resolution so BitmapFactory downsamples grid thumbnails
 // instead of decoding at full camera resolution on every load.
+private const val SKELETON_TILE_COUNT = 6
 private const val THUMBNAIL_TARGET_WIDTH_PX = 360
 private const val THUMBNAIL_TARGET_HEIGHT_PX = 480
 private const val VIEWER_TARGET_EDGE_PX = 1080
@@ -124,78 +128,88 @@ fun GalleryScreen(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Admin Gallery", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.gallery_title), style = MaterialTheme.typography.headlineSmall)
         CategoryTabs(state.category, onCategorySelected)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onRefresh, enabled = !state.loading) {
-                Text("Refresh")
+                Text(stringResource(R.string.gallery_refresh))
             }
             OutlinedButton(
                 onClick = { pendingAction = PendingGalleryAction.Delete },
                 enabled = selectedCount > 0 && !state.loading,
             ) {
-                Text("Delete")
+                Text(stringResource(R.string.gallery_delete))
             }
             OutlinedButton(
                 onClick = { pendingAction = PendingGalleryAction.Reprocess },
                 enabled = selectedCount > 0 && !state.loading,
             ) {
-                Text("Reprocess")
+                Text(stringResource(R.string.gallery_reprocess))
             }
         }
         Text(state.statusText, style = MaterialTheme.typography.bodyMedium)
-        if (state.loading) {
-            CircularProgressIndicator()
-        }
-        if (state.items.isEmpty() && !state.loading) {
-            Text("No images found.", style = MaterialTheme.typography.bodyLarge)
-        }
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(150.dp),
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(state.items, key = { it.name }) { image ->
-                GalleryImageCard(
-                    image = image,
-                    selected = image.name in state.selectedNames,
-                    previewLoader = previewLoader,
-                    onToggleSelected = { onToggleSelected(image) },
-                    onViewImage = { bitmap ->
-                        viewingImage = ViewedGalleryImage(image, bitmap)
-                    },
-                )
-            }
+        when {
+            state.loading && state.items.isEmpty() -> GallerySkeletonGrid()
+            state.items.isEmpty() -> GalleryEmptyState(state.category, onRefresh)
+            else ->
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(150.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(state.items, key = { it.name }) { image ->
+                        GalleryImageCard(
+                            image = image,
+                            selected = image.name in state.selectedNames,
+                            previewLoader = previewLoader,
+                            onToggleSelected = { onToggleSelected(image) },
+                            onViewImage = { bitmap ->
+                                viewingImage = ViewedGalleryImage(image, bitmap)
+                            },
+                        )
+                    }
+                }
         }
     }
 
     pendingAction?.let { action ->
+        val itemWord =
+            if (selectedCount == 1) {
+                stringResource(R.string.gallery_item_singular)
+            } else {
+                stringResource(R.string.gallery_item_plural)
+            }
+        val isDelete = action == PendingGalleryAction.Delete
         AlertDialog(
             onDismissRequest = { pendingAction = null },
             title = {
-                Text(if (action == PendingGalleryAction.Delete) "Delete selected" else "Reprocess selected")
+                val titleRes =
+                    if (isDelete) R.string.gallery_confirm_title_delete else R.string.gallery_confirm_title_reprocess
+                Text(stringResource(titleRes, selectedCount, itemWord))
             },
             text = {
-                Text("Apply this action to $selectedCount selected item(s)?")
+                val bodyRes =
+                    if (isDelete) R.string.gallery_confirm_body_delete else R.string.gallery_confirm_body_reprocess
+                Text(stringResource(bodyRes, itemWord))
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         pendingAction = null
-                        if (action == PendingGalleryAction.Delete) {
+                        if (isDelete) {
                             onDeleteSelected()
                         } else {
                             onReprocessSelected()
                         }
                     },
                 ) {
-                    Text("Confirm")
+                    Text(stringResource(if (isDelete) R.string.gallery_delete else R.string.gallery_reprocess))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingAction = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.gallery_cancel))
                 }
             },
         )
@@ -219,12 +233,7 @@ private fun CategoryTabs(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         GalleryCategory.entries.forEach { category ->
             val active = category == selected
-            val buttonText =
-                when (category) {
-                    GalleryCategory.Raw -> "Raw"
-                    GalleryCategory.Processed -> "Processed"
-                    GalleryCategory.Segmented -> "Segmented"
-                }
+            val buttonText = categoryLabel(category)
             if (active) {
                 Button(onClick = { onCategorySelected(category) }) {
                     Text(buttonText)
@@ -234,6 +243,61 @@ private fun CategoryTabs(
                     Text(buttonText)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun categoryLabel(category: GalleryCategory): String =
+    when (category) {
+        GalleryCategory.Raw -> stringResource(R.string.gallery_category_raw)
+        GalleryCategory.Processed -> stringResource(R.string.gallery_category_processed)
+        GalleryCategory.Segmented -> stringResource(R.string.gallery_category_segmented)
+    }
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun GallerySkeletonGrid() {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(150.dp),
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(SKELETON_TILE_COUNT) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(180.dp),
+            ) {}
+        }
+    }
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun GalleryEmptyState(
+    category: GalleryCategory,
+    onRefresh: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(top = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            stringResource(R.string.gallery_empty_title, categoryLabel(category).lowercase()),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            stringResource(R.string.gallery_empty_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+        )
+        OutlinedButton(onClick = onRefresh) {
+            Text(stringResource(R.string.gallery_refresh))
         }
     }
 }
@@ -250,7 +314,10 @@ private fun GalleryImageCard(
     val previewKey = galleryPreviewCacheKey(image, previewLoader.accessToken)
     var previewBitmap by remember(previewKey) { mutableStateOf<Bitmap?>(null) }
 
-    ElevatedCard(
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier =
             Modifier
                 .fillMaxWidth()
@@ -265,6 +332,7 @@ private fun GalleryImageCard(
                     Modifier
                         .fillMaxWidth()
                         .height(180.dp),
+                options = GalleryPreviewOptions(placeholder = stringResource(R.string.gallery_preview_placeholder)),
             )
             Checkbox(
                 checked = selected,
@@ -283,7 +351,7 @@ private fun GalleryImageCard(
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                image.sourceBlobName ?: "No lineage",
+                image.sourceBlobName ?: stringResource(R.string.gallery_no_lineage),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
@@ -293,7 +361,7 @@ private fun GalleryImageCard(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = { onViewImage(previewBitmap) }) {
-                    Text("View")
+                    Text(stringResource(R.string.gallery_view))
                 }
             }
         }
@@ -356,7 +424,8 @@ private fun GalleryPreview(
         } else {
             Image(
                 bitmap = currentBitmap.asImageBitmap(),
-                contentDescription = image.name,
+                contentDescription =
+                    stringResource(R.string.gallery_image_content_description, image.name.substringAfterLast("/")),
                 contentScale = options.contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -408,7 +477,7 @@ private fun GalleryImageViewerDialog(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     TextButton(onClick = onDismiss) {
-                        Text("Close")
+                        Text(stringResource(R.string.gallery_close))
                     }
                 }
                 GalleryPreview(
@@ -421,7 +490,7 @@ private fun GalleryImageViewerDialog(
                     options =
                         GalleryPreviewOptions(
                             contentScale = ContentScale.Fit,
-                            placeholder = "Image unavailable",
+                            placeholder = stringResource(R.string.gallery_image_unavailable),
                             initialBitmap = selection.bitmap,
                             targetSize = VIEWER_TARGET_SIZE,
                         ),

@@ -24,6 +24,8 @@ class UploadRepository(
     private val context: Context,
     private val dao: UploadQueueDao,
 ) {
+    fun recentUploads() = dao.recentStream()
+
     suspend fun enqueue(
         localUri: String,
         contentLengthBytes: Long,
@@ -51,10 +53,13 @@ class UploadRepository(
         return uploadId
     }
 
-    /** Re-queue a previously failed upload for another attempt. No-op unless it is terminally failed. */
-    suspend fun retry(uploadId: String) {
-        val entity = dao.get(uploadId) ?: return
-        if (entity.status != UploadStatus.FailedTerminal) return
+    /**
+     * Re-queue a previously failed upload for another attempt.
+     * Returns false without enqueuing anything if the upload isn't terminally failed.
+     */
+    suspend fun retry(uploadId: String): Boolean {
+        val entity = dao.get(uploadId)
+        if (entity == null || entity.status != UploadStatus.FailedTerminal) return false
         UploadStateMachine.assertTransition(entity.status, UploadStatus.Queued)
         dao.updateStatus(
             uploadId = uploadId,
@@ -64,6 +69,7 @@ class UploadRepository(
             updatedAtEpochMillis = System.currentTimeMillis(),
         )
         enqueueWorker(uploadId)
+        return true
     }
 
     private fun enqueueWorker(uploadId: String) {

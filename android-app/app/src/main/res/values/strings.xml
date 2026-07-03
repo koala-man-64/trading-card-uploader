@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Trading Card Uploader</string>
+
+    <string name="nav_capture">Capture</string>
+    <string name="nav_gallery">Gallery</string>
+
+    <string name="capture_title">Your cards</string>
+    <string name="capture_signed_in">Signed in</string>
+    <string name="capture_sign_in">Sign in</string>
+    <string name="capture_summary_uploaded">Uploaded</string>
+    <string name="capture_summary_uploading">Uploading</string>
+    <string name="capture_summary_failed">Failed</string>
+    <string name="capture_recent_heading">Recent</string>
+    <string name="capture_row_title">Card photo</string>
+    <string name="capture_retry">Retry</string>
+    <string name="capture_empty_title">Capture your first card</string>
+    <string name="capture_empty_body">Cards you capture or pick from Photos upload automatically and show up here.</string>
+    <string name="capture_action_capture">Capture card</string>
+    <string name="capture_action_sign_in">Sign in to upload</string>
+    <string name="capture_action_select_photo">Upload from Photos</string>
+
+    <string name="gallery_title">Admin Gallery</string>
+    <string name="gallery_category_raw">Raw</string>
+    <string name="gallery_category_processed">Processed</string>
+    <string name="gallery_category_segmented">Segmented</string>
+    <string name="gallery_refresh">Refresh</string>
+    <string name="gallery_delete">Delete</string>
+    <string name="gallery_reprocess">Reprocess</string>
+    <string name="gallery_cancel">Cancel</string>
+    <string name="gallery_close">Close</string>
+    <string name="gallery_view">View</string>
+    <string name="gallery_no_lineage">No lineage</string>
+    <string name="gallery_preview_placeholder">Preview</string>
+    <string name="gallery_image_unavailable">Image unavailable</string>
+    <string name="gallery_image_content_description">Card image %1$s</string>
+    <string name="gallery_empty_title">No %1$s images yet</string>
+    <string name="gallery_empty_body">Cards you capture will show up here once they finish uploading.</string>
+    <string name="gallery_confirm_title_delete">Delete %1$d %2$s?</string>
+    <string name="gallery_confirm_title_reprocess">Reprocess %1$d %2$s?</string>
+    <string name="gallery_confirm_body_delete">This permanently removes the selected %1$s from storage. This cannot be undone.</string>
+    <string name="gallery_confirm_body_reprocess">This re-runs processing on the selected %1$s and replaces any existing output.</string>
+    <string name="gallery_item_singular">item</string>
+    <string name="gallery_item_plural">items</string>
+</resources>
