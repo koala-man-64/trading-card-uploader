@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.tradingcards.uploader.auth.MsalAuthRepository
 import com.tradingcards.uploader.data.GalleryRepository
+import com.tradingcards.uploader.data.NetworkClients
 import com.tradingcards.uploader.data.UploadQueueDao
 import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.model.GalleryCategory
@@ -58,7 +59,8 @@ class MainActivity : ComponentActivity() {
         val database = UploadRepository.database(this)
         val repository = UploadRepository(this, database.uploadQueueDao())
         val authRepository = MsalAuthRepository(this)
-        val galleryRepository = GalleryRepository(BuildConfig.API_BASE_URL)
+        val galleryRepository =
+            GalleryRepository(BuildConfig.API_BASE_URL, client = NetworkClients.sasIssuerClient())
 
         setContent {
             uploaderApp(

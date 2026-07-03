@@ -9,6 +9,7 @@ import com.tradingcards.uploader.model.GallerySourceActionRequest
 import com.tradingcards.uploader.model.GallerySourceActionResponse
 import com.tradingcards.uploader.model.SasRequest
 import com.tradingcards.uploader.model.SasResponse
+import okhttp3.OkHttpClient
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -55,10 +56,14 @@ interface SasIssuerClient {
     ): Response<GallerySourceActionResponse>
 
     companion object {
-        fun create(baseUrl: String): SasIssuerClient {
+        fun create(
+            baseUrl: String,
+            client: OkHttpClient = OkHttpClient.Builder().build(),
+        ): SasIssuerClient {
             val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
             return Retrofit.Builder()
                 .baseUrl(baseUrl)
+                .client(client)
                 .addConverterFactory(MoshiConverterFactory.create(moshi))
                 .build()
                 .create(SasIssuerClient::class.java)

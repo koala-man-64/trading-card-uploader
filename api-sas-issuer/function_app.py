@@ -7,10 +7,9 @@ from urllib.parse import urlencode
 
 import azure.functions as func
 
-from shared.auth import JwtValidator
+from shared import runtime
 from shared.config import Settings
 from shared.gallery import (
-    build_container,
     delete_raw_source_group,
     list_raw_images,
     parse_limit,
@@ -22,7 +21,6 @@ from shared.gallery import (
     scanner_request,
 )
 from shared.models import Claims, Problem, UploadSasRequest
-from shared.sas import build_issuer
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -41,7 +39,7 @@ def _authorized_claims(
     scope: str,
 ) -> tuple[str, Claims]:
     authorization = req.headers.get("Authorization") or ""
-    claims = JwtValidator(settings).validate_authorization_header(authorization)
+    claims = runtime.get_jwt_validator().validate_authorization_header(authorization)
     claims.require_scope(scope)
     return authorization, claims
 
@@ -60,10 +58,10 @@ def healthz(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="v1/uploads/sas", methods=["POST"])
 def issue_upload_sas(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        settings = Settings.from_env()
+        settings = runtime.get_settings()
         _, claims = _authorized_claims(req, settings, settings.required_scope)
         upload_request = UploadSasRequest.from_json(req.get_json(), settings)
-        response = build_issuer(settings).issue(upload_request, claims)
+        response = runtime.get_issuer().issue(upload_request, claims)
         logging.info(
             "Issued upload SAS",
             extra={
@@ -94,14 +92,21 @@ def issue_upload_sas(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="v1/admin/gallery/images", methods=["GET"])
 def admin_gallery_images(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        settings = Settings.from_env()
+        settings = runtime.get_settings()
         authorization, claims = _authorized_claims(req, settings, settings.gallery_manage_scope)
         require_gallery_admin(settings, claims)
         category = str(req.params.get("category", "raw")).strip().lower()
         limit = parse_limit(req.params.get("limit"))
         cursor = req.params.get("cursor")
         if category == "raw":
-            payload = list_raw_images(settings, build_container(settings), limit, cursor)
+            payload = list_raw_images(
+                settings,
+                runtime.get_container(),
+                limit,
+                cursor,
+                service_client=runtime.get_service_client(),
+                key_cache=runtime.get_delegation_key_cache(),
+            )
         elif category in {"processed", "segmented"}:
             payload = scanner_gallery_images(settings, authorization, category, limit, cursor)
         else:
@@ -122,7 +127,7 @@ def admin_gallery_images(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="v1/admin/gallery/image", methods=["GET"])
 def admin_gallery_image(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        settings = Settings.from_env()
+        settings = runtime.get_settings()
         authorization, claims = _authorized_claims(req, settings, settings.gallery_manage_scope)
         require_gallery_admin(settings, claims)
         category = str(req.params.get("category", "raw")).strip().lower()
@@ -130,7 +135,7 @@ def admin_gallery_image(req: func.HttpRequest) -> func.HttpResponse:
         if not name:
             raise Problem(400, "missing_blob_name", "name is required")
         if category == "raw":
-            data = raw_image_bytes(build_container(settings), name)
+            data = raw_image_bytes(runtime.get_container(), name)
             return func.HttpResponse(body=data, status_code=200, mimetype="image/jpeg")
         if category in {"processed", "segmented"}:
             scanner_response = scanner_request(
@@ -157,7 +162,7 @@ def admin_gallery_image(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="v1/admin/gallery/actions/delete-source-group", methods=["POST"])
 def admin_gallery_delete_source_group(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        settings = Settings.from_env()
+        settings = runtime.get_settings()
         authorization, claims = _authorized_claims(req, settings, settings.gallery_manage_scope)
         require_gallery_admin(settings, claims)
         payload = req.get_json()
@@ -169,7 +174,7 @@ def admin_gallery_delete_source_group(req: func.HttpRequest) -> func.HttpRespons
         result = delete_raw_source_group(
             settings,
             authorization,
-            build_container(settings),
+            runtime.get_container(),
             source_blob_name,
         )
         logging.info(
@@ -202,7 +207,7 @@ def admin_gallery_delete_source_group(req: func.HttpRequest) -> func.HttpRespons
 @app.route(route="v1/admin/gallery/actions/delete-image", methods=["POST"])
 def admin_gallery_delete_image(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        settings = Settings.from_env()
+        settings = runtime.get_settings()
         authorization, claims = _authorized_claims(req, settings, settings.gallery_manage_scope)
         require_gallery_admin(settings, claims)
         payload = req.get_json()
@@ -242,7 +247,7 @@ def admin_gallery_delete_image(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="v1/admin/gallery/actions/reprocess-source", methods=["POST"])
 def admin_gallery_reprocess_source(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        settings = Settings.from_env()
+        settings = runtime.get_settings()
         authorization, claims = _authorized_claims(req, settings, settings.gallery_manage_scope)
         require_gallery_admin(settings, claims)
         payload = req.get_json()
@@ -254,7 +259,7 @@ def admin_gallery_reprocess_source(req: func.HttpRequest) -> func.HttpResponse:
         result = reprocess_raw_source(
             settings,
             authorization,
-            build_container(settings),
+            runtime.get_container(),
             source_blob_name,
         )
         logging.info(
