@@ -39,6 +39,7 @@ import com.tradingcards.uploader.R
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.cardDisplayName
+import com.tradingcards.uploader.model.cardPriceText
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -128,7 +129,8 @@ internal fun GalleryPreview(
                 contentDescription =
                     stringResource(
                         R.string.gallery_image_content_description,
-                        image.cardDisplayName() ?: image.name.substringAfterLast("/"),
+                        image.cardDisplayName()
+                            ?: stringResource(R.string.gallery_unknown_card),
                     ),
                 contentScale = options.contentScale,
                 modifier = Modifier.fillMaxSize(),
@@ -191,14 +193,18 @@ internal fun GalleryImageViewerDialog(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                selection.image.cardDisplayName()?.let { cardName ->
-                    Text(
-                        cardName,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                    )
-                }
+                Text(
+                    selection.image.cardDisplayName() ?: stringResource(R.string.gallery_unknown_card),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+                Text(
+                    selection.image.cardPriceText() ?: stringResource(R.string.gallery_no_price),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
                 formattedGalleryTimestamp(selection.image.lastModifiedUtc)?.let { timestamp ->
                     Text(
                         timestamp,

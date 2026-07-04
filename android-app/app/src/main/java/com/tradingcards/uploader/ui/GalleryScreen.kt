@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package com.tradingcards.uploader.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -44,12 +46,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tradingcards.uploader.R
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.data.NetworkClients
+import com.tradingcards.uploader.model.GalleryCardGroup
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
+import com.tradingcards.uploader.model.MULTIPLE_PRICES_SUMMARY
+import com.tradingcards.uploader.model.groupedGalleryImagesByCardName
 import kotlinx.coroutines.delay
 
 private enum class PendingGalleryAction {
@@ -57,8 +63,16 @@ private enum class PendingGalleryAction {
     Reprocess,
 }
 
+private enum class GalleryViewMode {
+    Individual,
+    Grouped,
+}
+
 private const val SKELETON_TILE_COUNT = 9
 private const val LOAD_MORE_RETRY_INTERVAL_MS = 3_000L
+private const val GROUP_THUMBNAIL_LIMIT = 4
+private const val GROUP_THUMBNAIL_WIDTH_DP = 42
+private const val GROUP_THUMBNAIL_HEIGHT_DP = 56
 
 @Suppress(
     "FunctionNaming",
@@ -81,6 +95,7 @@ fun GalleryScreen(
 ) {
     var pendingAction by remember { mutableStateOf<PendingGalleryAction?>(null) }
     var viewingImage by remember { mutableStateOf<ViewedGalleryImage?>(null) }
+    var viewMode by remember { mutableStateOf(GalleryViewMode.Individual) }
     val context = LocalContext.current
     val previewLoader =
         GalleryPreviewLoader(
@@ -100,8 +115,18 @@ fun GalleryScreen(
     ) {
         GalleryHeader(state, onRefresh)
         CategorySelector(state.category, enabled = !state.loading, onCategorySelected)
+        GalleryViewModeSelector(
+            selected = viewMode,
+            enabled = !state.loading,
+            onViewModeSelected = { selected ->
+                if (selected == GalleryViewMode.Grouped && selectedCount > 0) {
+                    onClearSelection()
+                }
+                viewMode = selected
+            },
+        )
         state.errorText?.let { ErrorNotice(it) }
-        if (selectedCount > 0) {
+        if (selectedCount > 0 && viewMode == GalleryViewMode.Individual) {
             SelectionBar(
                 selectedCount = selectedCount,
                 enabled = !state.loading,
@@ -113,31 +138,23 @@ fun GalleryScreen(
         when {
             state.loading && state.items.isEmpty() -> GallerySkeletonGrid()
             state.items.isEmpty() -> GalleryEmptyState(state.category, onRefresh)
+            viewMode == GalleryViewMode.Grouped ->
+                GroupedGalleryGrid(
+                    groups = groupedGalleryImagesByCardName(state.items),
+                    previewLoader = previewLoader,
+                    onViewImage = { image, bitmap -> viewingImage = ViewedGalleryImage(image, bitmap) },
+                    nextCursor = state.nextCursor,
+                    onLoadMore = onLoadMore,
+                )
             else ->
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(110.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(state.items, key = { it.name }) { image ->
-                        GalleryImageTile(
-                            image = image,
-                            selected = image.name in state.selectedNames,
-                            selectionActive = selectedCount > 0,
-                            previewLoader = previewLoader,
-                            onToggleSelected = { onToggleSelected(image) },
-                            onViewImage = { bitmap ->
-                                viewingImage = ViewedGalleryImage(image, bitmap)
-                            },
-                        )
-                    }
-                    state.nextCursor?.let { cursor ->
-                        item(key = "load-more", span = { GridItemSpan(maxLineSpan) }) {
-                            LoadMoreRow(cursor = cursor, onLoadMore = onLoadMore)
-                        }
-                    }
-                }
+                IndividualGalleryGrid(
+                    state = state,
+                    previewLoader = previewLoader,
+                    selectedCount = selectedCount,
+                    onToggleSelected = onToggleSelected,
+                    onViewImage = { image, bitmap -> viewingImage = ViewedGalleryImage(image, bitmap) },
+                    onLoadMore = onLoadMore,
+                )
         }
     }
 
@@ -163,6 +180,70 @@ fun GalleryScreen(
             previewLoader = previewLoader,
             onDismiss = { viewingImage = null },
         )
+    }
+}
+
+@Suppress("FunctionNaming", "LongParameterList", "ktlint:standard:function-naming")
+@Composable
+private fun IndividualGalleryGrid(
+    state: GalleryUiState,
+    previewLoader: GalleryPreviewLoader,
+    selectedCount: Int,
+    onToggleSelected: (GalleryImage) -> Unit,
+    onViewImage: (GalleryImage, android.graphics.Bitmap?) -> Unit,
+    onLoadMore: () -> Unit,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(110.dp),
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(state.items, key = { it.name }) { image ->
+            GalleryImageTile(
+                image = image,
+                selected = image.name in state.selectedNames,
+                selectionActive = selectedCount > 0,
+                previewLoader = previewLoader,
+                onToggleSelected = { onToggleSelected(image) },
+                onViewImage = { bitmap -> onViewImage(image, bitmap) },
+            )
+        }
+        state.nextCursor?.let { cursor ->
+            item(key = "load-more", span = { GridItemSpan(maxLineSpan) }) {
+                LoadMoreRow(cursor = cursor, onLoadMore = onLoadMore)
+            }
+        }
+    }
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun GroupedGalleryGrid(
+    groups: List<GalleryCardGroup>,
+    previewLoader: GalleryPreviewLoader,
+    onViewImage: (GalleryImage, android.graphics.Bitmap?) -> Unit,
+    nextCursor: String?,
+    onLoadMore: () -> Unit,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(160.dp),
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(groups, key = { it.cardName ?: "__unknown_card_group__" }) { group ->
+            GalleryGroupCard(
+                group = group,
+                previewLoader = previewLoader,
+                onViewImage = onViewImage,
+            )
+        }
+        nextCursor?.let { cursor ->
+            item(key = "load-more", span = { GridItemSpan(maxLineSpan) }) {
+                LoadMoreRow(cursor = cursor, onLoadMore = onLoadMore)
+            }
+        }
     }
 }
 
@@ -287,6 +368,52 @@ private fun CategorySelector(
     }
 }
 
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun GalleryViewModeSelector(
+    selected: GalleryViewMode,
+    enabled: Boolean,
+    onViewModeSelected: (GalleryViewMode) -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = CircleShape,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.padding(4.dp)) {
+            GalleryViewMode.entries.forEach { mode ->
+                val active = mode == selected
+                Surface(
+                    color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    shape = CircleShape,
+                    border = if (active) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .clip(CircleShape)
+                            .clickable(enabled = enabled) { onViewModeSelected(mode) },
+                ) {
+                    Text(
+                        viewModeLabel(mode),
+                        style = MaterialTheme.typography.labelLarge,
+                        color =
+                            if (active) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        textAlign = TextAlign.Center,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun categoryLabel(category: GalleryCategory): String =
     when (category) {
@@ -294,6 +421,80 @@ private fun categoryLabel(category: GalleryCategory): String =
         GalleryCategory.Processed -> stringResource(R.string.gallery_category_processed)
         GalleryCategory.Segmented -> stringResource(R.string.gallery_category_segmented)
     }
+
+@Composable
+private fun viewModeLabel(mode: GalleryViewMode): String =
+    when (mode) {
+        GalleryViewMode.Individual -> stringResource(R.string.gallery_view_individual)
+        GalleryViewMode.Grouped -> stringResource(R.string.gallery_view_grouped)
+    }
+
+@Suppress("FunctionNaming", "LongMethod", "ktlint:standard:function-naming")
+@Composable
+private fun GalleryGroupCard(
+    group: GalleryCardGroup,
+    previewLoader: GalleryPreviewLoader,
+    onViewImage: (GalleryImage, android.graphics.Bitmap?) -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                group.cardName ?: stringResource(R.string.gallery_unknown_card),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val countText =
+                pluralStringResource(
+                    R.plurals.gallery_group_card_count,
+                    group.items.size,
+                    group.items.size,
+                )
+            val priceText =
+                when (group.priceSummary) {
+                    null -> stringResource(R.string.gallery_no_price)
+                    MULTIPLE_PRICES_SUMMARY -> stringResource(R.string.gallery_multiple_prices)
+                    else -> group.priceSummary
+                }
+            Text(
+                stringResource(R.string.gallery_group_summary, countText, priceText),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                group.items.take(GROUP_THUMBNAIL_LIMIT).forEach { image ->
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(
+                                    width = GROUP_THUMBNAIL_WIDTH_DP.dp,
+                                    height = GROUP_THUMBNAIL_HEIGHT_DP.dp,
+                                )
+                                .clip(TileShape)
+                                .clickable { onViewImage(image, null) },
+                    ) {
+                        GalleryPreview(
+                            image = image,
+                            previewLoader = previewLoader,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable

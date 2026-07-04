@@ -1,5 +1,7 @@
 package com.tradingcards.uploader.data
 
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.GalleryImageDeleteRequest
@@ -85,6 +87,53 @@ class GalleryRepositoryTest {
             "https://api.example.test/api/v1/admin/gallery/image?category=processed&name=processed%2Fcard+one.jpg",
             resolved,
         )
+    }
+
+    @Test
+    fun galleryImagesResponseAcceptsOptionalCardMetadata() {
+        val adapter =
+            Moshi
+                .Builder()
+                .add(KotlinJsonAdapterFactory())
+                .build()
+                .adapter(GalleryImagesResponse::class.java)
+
+        val response =
+            adapter.fromJson(
+                """
+                {
+                  "category": "processed",
+                  "nextCursor": null,
+                  "items": [
+                    {
+                      "category": "processed",
+                      "name": "processed/a.jpg",
+                      "sourceBlobName": "raw/a.jpg",
+                      "size": 1,
+                      "lastModifiedUtc": null,
+                      "previewUrl": "/api/v1/admin/gallery/image?category=processed&name=processed%2Fa.jpg",
+                      "canCascade": true,
+                      "cardName": "Pikachu",
+                      "price": "${'$'}12.50"
+                    },
+                    {
+                      "category": "processed",
+                      "name": "processed/b.jpg",
+                      "sourceBlobName": "raw/b.jpg",
+                      "size": 1,
+                      "lastModifiedUtc": null,
+                      "previewUrl": "/api/v1/admin/gallery/image?category=processed&name=processed%2Fb.jpg",
+                      "canCascade": true
+                    }
+                  ]
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals("Pikachu", response?.items?.get(0)?.cardName)
+        assertEquals("$12.50", response?.items?.get(0)?.price)
+        assertEquals(null, response?.items?.get(1)?.cardName)
+        assertEquals(null, response?.items?.get(1)?.price)
     }
 
     private fun scannerNotConfiguredClient(): SasIssuerClient =
