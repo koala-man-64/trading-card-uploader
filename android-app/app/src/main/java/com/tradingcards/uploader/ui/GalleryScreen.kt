@@ -148,6 +148,32 @@ fun GalleryScreen(
         GalleryImageViewerDialog(
             selection = selection,
             previewLoader = previewLoader,
+            canNavigatePrevious =
+                adjacentGalleryImage(
+                    state.items,
+                    selection.image.name,
+                    GalleryImageNavigationDirection.Previous,
+                ) != null,
+            canNavigateNext =
+                adjacentGalleryImage(
+                    state.items,
+                    selection.image.name,
+                    GalleryImageNavigationDirection.Next,
+                ) != null,
+            onPrevious = {
+                adjacentGalleryImage(
+                    state.items,
+                    selection.image.name,
+                    GalleryImageNavigationDirection.Previous,
+                )?.let { viewingImage = ViewedGalleryImage(it, null) }
+            },
+            onNext = {
+                adjacentGalleryImage(
+                    state.items,
+                    selection.image.name,
+                    GalleryImageNavigationDirection.Next,
+                )?.let { viewingImage = ViewedGalleryImage(it, null) }
+            },
             onDismiss = { viewingImage = null },
         )
     }
