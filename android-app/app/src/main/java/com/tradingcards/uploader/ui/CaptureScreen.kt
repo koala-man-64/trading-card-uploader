@@ -45,6 +45,7 @@ data class CaptureScreenActions(
     val onCapture: () -> Unit,
     val onSelectPhoto: () -> Unit,
     val onRetry: (UploadEntity) -> Unit,
+    val onRemove: (UploadEntity) -> Unit,
 )
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
@@ -73,6 +74,7 @@ fun CaptureScreen(
             UploadList(
                 uploads = uploads,
                 onRetry = actions.onRetry,
+                onRemove = actions.onRemove,
                 modifier = Modifier.weight(FULL_WEIGHT),
             )
         }
@@ -220,6 +222,7 @@ private fun SummaryStat(
 private fun UploadList(
     uploads: List<UploadEntity>,
     onRetry: (UploadEntity) -> Unit,
+    onRemove: (UploadEntity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -234,17 +237,18 @@ private fun UploadList(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(uploads, key = { it.uploadId }) { upload ->
-                UploadRow(upload, onRetry)
+                UploadRow(upload, onRetry, onRemove)
             }
         }
     }
 }
 
-@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Suppress("FunctionNaming", "LongMethod", "ktlint:standard:function-naming")
 @Composable
 private fun UploadRow(
     upload: UploadEntity,
     onRetry: (UploadEntity) -> Unit,
+    onRemove: (UploadEntity) -> Unit,
 ) {
     val ui = upload.status.toUi()
     val border =
@@ -274,11 +278,7 @@ private fun UploadRow(
                 Spacer(Modifier.height(4.dp))
                 if (ui.inProgress) {
                     LinearProgressIndicator(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .clip(CircleShape),
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
                     )
                 } else {
                     Text(
@@ -294,10 +294,18 @@ private fun UploadRow(
                 }
             }
             Spacer(Modifier.width(12.dp))
-            if (ui.canRetry) {
-                TextButton(onClick = { onRetry(upload) }) { Text(stringResource(R.string.capture_retry)) }
-            } else {
-                StatusPill(ui)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (ui.canRetry) {
+                    TextButton(onClick = { onRetry(upload) }) { Text(stringResource(R.string.capture_retry)) }
+                } else {
+                    StatusPill(ui)
+                }
+                if (ui.canRemove) {
+                    TextButton(onClick = { onRemove(upload) }) { Text(stringResource(R.string.capture_remove)) }
+                }
             }
         }
     }

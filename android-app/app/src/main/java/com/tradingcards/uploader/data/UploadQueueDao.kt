@@ -29,6 +29,12 @@ interface UploadQueueDao {
     @Query("SELECT * FROM upload_queue ORDER BY createdAtEpochMillis DESC LIMIT 50")
     fun recentStream(): Flow<List<UploadEntity>>
 
+    @Query("DELETE FROM upload_queue WHERE uploadId = :uploadId AND status != :completeStatus")
+    suspend fun deletePending(
+        uploadId: String,
+        completeStatus: UploadStatus,
+    ): Int
+
     @Query(
         """
         UPDATE upload_queue
