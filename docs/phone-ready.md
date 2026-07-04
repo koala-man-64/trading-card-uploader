@@ -81,11 +81,10 @@ Enable USB debugging on the phone and install:
 .\scripts\install-phone-apk.ps1 -ApkPath .\app-debug.apk
 ```
 
-Or run the equivalent platform-tools command:
-
-```powershell
-adb install -r .\app-debug.apk
-```
+The install script validates the APK before installing it. It refuses APKs
+whose MSAL config still contains placeholders or whose redirect URI does not
+match the APK signing certificate. Do not bypass it with raw `adb install` for
+phone sign-in testing.
 
 ## Smoke Checklist
 
