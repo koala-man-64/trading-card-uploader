@@ -14,6 +14,7 @@
     <string name="capture_recent_heading">Recent</string>
     <string name="capture_row_title">Card photo</string>
     <string name="capture_retry">Retry</string>
+    <string name="capture_remove">Remove</string>
     <string name="capture_empty_title">Capture your first card</string>
     <string name="capture_empty_body">Cards you capture or pick from Photos upload automatically and show up here.</string>
     <string name="capture_action_capture">Capture card</string>

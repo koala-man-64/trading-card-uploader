@@ -58,6 +58,17 @@ class CaptureViewModel(
         }
     }
 
+    fun removePendingUpload(uploadId: String) {
+        viewModelScope.launch {
+            _statusText.value =
+                if (repository.removePending(uploadId)) {
+                    "Removed upload"
+                } else {
+                    "Only pending uploads can be removed"
+                }
+        }
+    }
+
     fun onCaptureQueued() {
         _statusText.value = ""
     }
