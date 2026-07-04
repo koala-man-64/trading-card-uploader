@@ -9,6 +9,7 @@ import com.tradingcards.uploader.model.GallerySourceActionRequest
 import com.tradingcards.uploader.model.GallerySourceActionResponse
 import com.tradingcards.uploader.model.SasRequest
 import com.tradingcards.uploader.model.SasResponse
+import com.tradingcards.uploader.model.ScannerStatusResponse
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -128,5 +129,8 @@ class GalleryRepositoryTest {
                 authorization: String,
                 request: GallerySourceActionRequest,
             ): Response<GallerySourceActionResponse> = error("reprocessGallerySource was not expected")
+
+            override suspend fun scannerStatus(authorization: String): Response<ScannerStatusResponse> =
+                error("scannerStatus was not expected")
         }
 }

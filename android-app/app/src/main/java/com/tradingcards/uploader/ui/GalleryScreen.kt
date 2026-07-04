@@ -3,13 +3,16 @@ package com.tradingcards.uploader.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -19,6 +22,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +50,7 @@ import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.data.NetworkClients
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
+import kotlinx.coroutines.delay
 
 private enum class PendingGalleryAction {
     Delete,
@@ -52,6 +58,7 @@ private enum class PendingGalleryAction {
 }
 
 private const val SKELETON_TILE_COUNT = 9
+private const val LOAD_MORE_RETRY_INTERVAL_MS = 3_000L
 
 @Suppress(
     "FunctionNaming",
@@ -70,6 +77,7 @@ fun GalleryScreen(
     onClearSelection: () -> Unit,
     onDeleteSelected: () -> Unit,
     onReprocessSelected: () -> Unit,
+    onLoadMore: () -> Unit,
 ) {
     var pendingAction by remember { mutableStateOf<PendingGalleryAction?>(null) }
     var viewingImage by remember { mutableStateOf<ViewedGalleryImage?>(null) }
@@ -124,6 +132,11 @@ fun GalleryScreen(
                             },
                         )
                     }
+                    state.nextCursor?.let { cursor ->
+                        item(key = "load-more", span = { GridItemSpan(maxLineSpan) }) {
+                            LoadMoreRow(cursor = cursor, onLoadMore = onLoadMore)
+                        }
+                    }
                 }
         }
     }
@@ -153,6 +166,37 @@ fun GalleryScreen(
     }
 }
 
+/**
+ * Sentinel row at the end of the grid. Composing it means the user scrolled
+ * to the last loaded page, so it requests the next cursor page. The request
+ * repeats on an interval while the row stays visible because the ViewModel
+ * drops load-more calls that race a poll refresh; repeats are no-ops while a
+ * page fetch is already in flight, and the row leaves composition once the
+ * cursor is exhausted.
+ */
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun LoadMoreRow(
+    cursor: String,
+    onLoadMore: () -> Unit,
+) {
+    LaunchedEffect(cursor) {
+        while (true) {
+            onLoadMore()
+            delay(LOAD_MORE_RETRY_INTERVAL_MS)
+        }
+    }
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+    }
+}
+
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
 private fun GalleryHeader(
@@ -173,10 +217,13 @@ private fun GalleryHeader(
                 color = MaterialTheme.colorScheme.onBackground,
             )
             val subtitle =
-                if (state.loading && state.items.isEmpty()) {
-                    stringResource(R.string.gallery_loading)
-                } else {
-                    pluralStringResource(R.plurals.gallery_image_count, state.items.size, state.items.size)
+                when {
+                    state.loading && state.items.isEmpty() -> stringResource(R.string.gallery_loading)
+                    // More cursor pages exist server-side, so the count is a floor.
+                    state.nextCursor != null ->
+                        stringResource(R.string.gallery_image_count_more, state.items.size)
+                    else ->
+                        pluralStringResource(R.plurals.gallery_image_count, state.items.size, state.items.size)
                 }
             Text(
                 subtitle,

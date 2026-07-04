@@ -13,6 +13,7 @@ import com.tradingcards.uploader.model.GallerySourceActionRequest
 import com.tradingcards.uploader.model.GallerySourceActionResponse
 import com.tradingcards.uploader.model.SasRequest
 import com.tradingcards.uploader.model.SasResponse
+import com.tradingcards.uploader.model.ScannerStatusResponse
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -35,8 +36,41 @@ class GalleryLoadTest {
             val loaded = loadGallery("token", GalleryCategory.Processed, repository)
 
             assertEquals(GalleryCategory.Processed, loaded.selectedCategory)
-            assertEquals(GalleryCategory.Processed.wireValue, loaded.response.category)
-            assertEquals(listOf("processed/a.jpg"), loaded.response.items.map { it.name })
+            assertEquals(listOf("processed/a.jpg"), loaded.items.map { it.name })
+        }
+
+    @Test
+    fun initialLoadFetchesSinglePageAndKeepsCursorForLoadMore() =
+        runTest {
+            val client = pagedProcessedClient()
+            val repository =
+                GalleryRepository(
+                    apiBaseUrl = "https://api.example.test/api/",
+                    client = client,
+                )
+
+            val loaded = loadGallery("token", GalleryCategory.Processed, repository)
+
+            assertEquals(listOf("processed/a.jpg"), loaded.items.map { it.name })
+            assertEquals("1", loaded.nextCursor)
+            assertEquals(listOf(null), client.requestedCursors)
+        }
+
+    @Test
+    fun refreshWithMinItemsFollowsCursorToPreserveLoadedDepth() =
+        runTest {
+            val client = pagedProcessedClient()
+            val repository =
+                GalleryRepository(
+                    apiBaseUrl = "https://api.example.test/api/",
+                    client = client,
+                )
+
+            val loaded = loadGallery("token", GalleryCategory.Processed, repository, minItems = 2)
+
+            assertEquals(listOf("processed/a.jpg", "processed/b.jpg"), loaded.items.map { it.name })
+            assertEquals(null, loaded.nextCursor)
+            assertEquals(listOf(null, "1"), client.requestedCursors)
         }
 
     @Test
@@ -90,21 +124,44 @@ class GalleryLoadTest {
                 Response.success(
                     GalleryImagesResponse(
                         category = GalleryCategory.Processed.wireValue,
-                        items =
-                            listOf(
-                                GalleryImage(
-                                    category = GalleryCategory.Processed.wireValue,
-                                    name = "processed/a.jpg",
-                                    sourceBlobName = "raw/a.jpg",
-                                    size = 1,
-                                    lastModifiedUtc = null,
-                                    previewUrl = PROCESSED_PREVIEW_URL,
-                                    canCascade = true,
-                                ),
-                            ),
+                        items = listOf(processedImage("processed/a.jpg")),
                         nextCursor = null,
                     ),
                 ),
+        )
+
+    private fun pagedProcessedClient(): RecordingGalleryClient =
+        RecordingGalleryClient(
+            pagedResponses =
+                mapOf(
+                    null to
+                        Response.success(
+                            GalleryImagesResponse(
+                                category = GalleryCategory.Processed.wireValue,
+                                items = listOf(processedImage("processed/a.jpg")),
+                                nextCursor = "1",
+                            ),
+                        ),
+                    "1" to
+                        Response.success(
+                            GalleryImagesResponse(
+                                category = GalleryCategory.Processed.wireValue,
+                                items = listOf(processedImage("processed/b.jpg")),
+                                nextCursor = null,
+                            ),
+                        ),
+                ),
+        )
+
+    private fun processedImage(name: String): GalleryImage =
+        GalleryImage(
+            category = GalleryCategory.Processed.wireValue,
+            name = name,
+            sourceBlobName = "raw/a.jpg",
+            size = 1,
+            lastModifiedUtc = null,
+            previewUrl = PROCESSED_PREVIEW_URL,
+            canCascade = true,
         )
 
     private fun scannerNotConfiguredForProcessedClient(): RecordingGalleryClient =
@@ -136,9 +193,11 @@ class GalleryLoadTest {
         )
 
     private class RecordingGalleryClient(
-        private val processedResponse: Response<GalleryImagesResponse>,
+        private val processedResponse: Response<GalleryImagesResponse>? = null,
+        private val pagedResponses: Map<String?, Response<GalleryImagesResponse>> = emptyMap(),
     ) : SasIssuerClient {
         val requestedCategories = mutableListOf<String>()
+        val requestedCursors = mutableListOf<String?>()
 
         override suspend fun healthz(): Response<Map<String, String>> = error("healthz was not expected")
 
@@ -154,11 +213,13 @@ class GalleryLoadTest {
             cursor: String?,
         ): Response<GalleryImagesResponse> {
             requestedCategories += category
-            return if (category == GalleryCategory.Processed.wireValue) {
-                processedResponse
-            } else {
+            requestedCursors += cursor
+            if (category != GalleryCategory.Processed.wireValue) {
                 error("Unexpected gallery category: $category")
             }
+            return pagedResponses[cursor]
+                ?: processedResponse
+                ?: error("No response configured for cursor: $cursor")
         }
 
         override suspend fun deleteGallerySourceGroup(
@@ -175,6 +236,10 @@ class GalleryLoadTest {
             authorization: String,
             request: GallerySourceActionRequest,
         ): Response<GallerySourceActionResponse> = error("reprocessGallerySource was not expected")
+
+        override suspend fun scannerStatus(authorization: String): Response<ScannerStatusResponse> {
+            error("scannerStatus was not expected")
+        }
     }
 
     private companion object {

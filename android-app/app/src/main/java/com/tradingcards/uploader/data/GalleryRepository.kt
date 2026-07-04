@@ -14,6 +14,7 @@ import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.GalleryImageDeleteRequest
 import com.tradingcards.uploader.model.GalleryImagesResponse
 import com.tradingcards.uploader.model.GallerySourceActionRequest
+import com.tradingcards.uploader.model.ScannerStatusResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.Response
@@ -56,11 +57,13 @@ class GalleryRepository(
     suspend fun list(
         accessToken: String,
         category: GalleryCategory,
+        cursor: String? = null,
     ): GalleryImagesResponse =
         requireBody(
             client.listGalleryImages(
                 authorization = bearer(accessToken),
                 category = category.wireValue,
+                cursor = cursor,
             ),
         )
 
@@ -87,6 +90,9 @@ class GalleryRepository(
             ),
         )
     }
+
+    suspend fun scannerStatus(accessToken: String): ScannerStatusResponse =
+        requireBody(client.scannerStatus(authorization = bearer(accessToken)))
 
     suspend fun reprocessSource(
         accessToken: String,
