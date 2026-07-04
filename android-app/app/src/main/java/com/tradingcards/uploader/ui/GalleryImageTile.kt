@@ -1,6 +1,7 @@
 package com.tradingcards.uploader.ui
 
-import android.graphics.Bitmap
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tradingcards.uploader.R
+import com.tradingcards.uploader.data.galleryPreviewMemoryCacheKey
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.cardDisplayName
 import com.tradingcards.uploader.model.cardPriceText
@@ -54,29 +56,34 @@ internal fun GalleryImageTile(
     selectionActive: Boolean,
     previewLoader: GalleryPreviewLoader,
     onToggleSelected: () -> Unit,
-    onViewImage: (Bitmap?) -> Unit,
+    onViewImage: (String?) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var previewBitmap by remember(image, previewLoader.accessToken) { mutableStateOf<Bitmap?>(null) }
-    val border =
-        if (selected) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        }
+    var previewMemoryCacheKey by remember(image) { mutableStateOf<String?>(null) }
+    val borderWidth by animateDpAsState(if (selected) 2.dp else 1.dp, label = "gallery-tile-border-width")
+    val borderColor by
+        animateColorAsState(
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            label = "gallery-tile-border-color",
+        )
+    val border = BorderStroke(borderWidth, borderColor)
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = TileShape,
         border = border,
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clip(TileShape)
                 .clickable {
                     if (selectionActive) {
                         onToggleSelected()
                     } else {
-                        onViewImage(previewBitmap)
+                        onViewImage(
+                            previewMemoryCacheKey
+                                ?: galleryPreviewMemoryCacheKey(image, THUMBNAIL_CACHE_VARIANT),
+                        )
                     }
                 },
     ) {
@@ -84,7 +91,7 @@ internal fun GalleryImageTile(
             GalleryPreview(
                 image = image,
                 previewLoader = previewLoader,
-                onBitmapLoaded = { previewBitmap = it },
+                onMemoryCacheKeyLoaded = { previewMemoryCacheKey = it },
                 modifier = Modifier.fillMaxSize(),
             )
             CardMetadataLabel(
@@ -149,18 +156,24 @@ private fun SelectionToggle(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background =
-        if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.scrim.copy(alpha = TOGGLE_SCRIM_ALPHA)
-        }
-    val ring =
-        if (selected) {
-            Color.Transparent
-        } else {
-            Color.White.copy(alpha = TOGGLE_RING_ALPHA)
-        }
+    val background by
+        animateColorAsState(
+            if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.scrim.copy(alpha = TOGGLE_SCRIM_ALPHA)
+            },
+            label = "gallery-toggle-background",
+        )
+    val ring by
+        animateColorAsState(
+            if (selected) {
+                Color.Transparent
+            } else {
+                Color.White.copy(alpha = TOGGLE_RING_ALPHA)
+            },
+            label = "gallery-toggle-ring",
+        )
     Box(
         modifier =
             modifier

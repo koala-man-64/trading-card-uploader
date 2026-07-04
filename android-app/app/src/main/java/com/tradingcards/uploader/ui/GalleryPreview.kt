@@ -1,7 +1,6 @@
 package com.tradingcards.uploader.ui
 
 import android.content.Context
-import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -35,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -43,9 +41,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.ImageLoader
+import coil.compose.AsyncImagePainter
+import coil.compose.rememberAsyncImagePainter
 import coil.size.Size
 import com.tradingcards.uploader.R
 import com.tradingcards.uploader.data.GalleryRepository
+import com.tradingcards.uploader.data.toImageRequest
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.cardDisplayName
 import com.tradingcards.uploader.model.cardPriceText
@@ -59,6 +60,8 @@ import java.time.format.FormatStyle
 private const val THUMBNAIL_TARGET_WIDTH_PX = 360
 private const val THUMBNAIL_TARGET_HEIGHT_PX = 480
 private const val VIEWER_TARGET_EDGE_PX = 1080
+internal const val THUMBNAIL_CACHE_VARIANT = "thumbnail"
+private const val VIEWER_CACHE_VARIANT = "viewer"
 private val THUMBNAIL_TARGET_SIZE = Size(THUMBNAIL_TARGET_WIDTH_PX, THUMBNAIL_TARGET_HEIGHT_PX)
 private val VIEWER_TARGET_SIZE = Size(VIEWER_TARGET_EDGE_PX, VIEWER_TARGET_EDGE_PX)
 private val VIEWER_SWIPE_THRESHOLD = 72.dp
@@ -71,71 +74,89 @@ internal data class GalleryPreviewLoader(
 )
 
 private data class GalleryPreviewCacheKey(
+    val category: String,
     val name: String,
+    val previewUrl: String,
     val lastModifiedUtc: String?,
     val size: Long,
-    val accessToken: String?,
+    val cacheVariant: String,
 )
 
 internal data class ViewedGalleryImage(
     val image: GalleryImage,
-    val bitmap: Bitmap?,
+    val placeholderMemoryCacheKey: String?,
 )
 
 internal data class GalleryPreviewOptions(
     val contentScale: ContentScale = ContentScale.Crop,
     val placeholder: String = "",
-    val initialBitmap: Bitmap? = null,
     val targetSize: Size = THUMBNAIL_TARGET_SIZE,
+    val cacheVariant: String = THUMBNAIL_CACHE_VARIANT,
+    val placeholderMemoryCacheKey: String? = null,
 )
 
-@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Suppress("FunctionNaming", "LongMethod", "ktlint:standard:function-naming")
 @Composable
 internal fun GalleryPreview(
     image: GalleryImage,
     previewLoader: GalleryPreviewLoader,
-    onBitmapLoaded: (Bitmap) -> Unit = {},
+    onMemoryCacheKeyLoaded: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     options: GalleryPreviewOptions = GalleryPreviewOptions(),
 ) {
-    val previewKey = galleryPreviewCacheKey(image, previewLoader.accessToken)
-    var bitmap by remember(previewKey) { mutableStateOf(options.initialBitmap) }
-    var loading by remember(previewKey) { mutableStateOf(false) }
-    var attemptedPreviewUrl by remember(previewKey) { mutableStateOf<String?>(null) }
-    LaunchedEffect(previewKey, image.previewUrl) {
-        if (bitmap != null) {
-            loading = false
-            return@LaunchedEffect
+    val previewKey = galleryPreviewCacheKey(image, options.cacheVariant)
+    val token = previewLoader.accessToken
+    val requestSpecs =
+        remember(previewKey) {
+            previewLoader.repository.previewRequestSpecs(image, options.cacheVariant)
         }
-        if (attemptedPreviewUrl == image.previewUrl) {
-            return@LaunchedEffect
+    var requestIndex by remember(previewKey) { mutableStateOf(0) }
+    var exhaustedFallbacks by remember(previewKey) { mutableStateOf(false) }
+    val activeSpec = requestSpecs.getOrNull(requestIndex)
+    val activeRequest =
+        remember(activeSpec, token, options.targetSize, options.placeholderMemoryCacheKey) {
+            if (token == null || activeSpec == null) {
+                null
+            } else {
+                activeSpec.toImageRequest(
+                    context = previewLoader.context,
+                    accessToken = token,
+                    targetSize = options.targetSize,
+                    placeholderMemoryCacheKey = options.placeholderMemoryCacheKey,
+                )
+            }
         }
-        bitmap = null
-        loading = previewLoader.accessToken != null
-        attemptedPreviewUrl = image.previewUrl
-        val loaded = loadPreviewBitmap(previewLoader, image, options.targetSize)
-        bitmap = loaded
-        loaded?.let(onBitmapLoaded)
-        loading = false
+    val painter =
+        rememberAsyncImagePainter(
+            model = activeRequest,
+            imageLoader = previewLoader.imageLoader,
+        )
+    val painterState = painter.state
+
+    LaunchedEffect(previewKey, painterState) {
+        when (painterState) {
+            is AsyncImagePainter.State.Success -> {
+                activeSpec?.memoryCacheKey?.let(onMemoryCacheKeyLoaded)
+                exhaustedFallbacks = false
+            }
+            is AsyncImagePainter.State.Error -> {
+                if (requestIndex < requestSpecs.lastIndex) {
+                    requestIndex += 1
+                } else {
+                    exhaustedFallbacks = true
+                }
+            }
+            else -> Unit
+        }
     }
+
     Box(
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        val currentBitmap = bitmap
-        if (currentBitmap == null) {
-            if (loading) {
-                CircularProgressIndicator(modifier = Modifier.size(28.dp))
-            } else {
-                Text(
-                    options.placeholder,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
+        if (activeRequest != null && !exhaustedFallbacks) {
             Image(
-                bitmap = currentBitmap.asImageBitmap(),
+                painter = painter,
                 contentDescription =
                     stringResource(
                         R.string.gallery_image_content_description,
@@ -145,24 +166,18 @@ internal fun GalleryPreview(
                 contentScale = options.contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
+            if (painterState is AsyncImagePainter.State.Empty || painterState is AsyncImagePainter.State.Loading) {
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            }
+        } else {
+            Text(
+                options.placeholder,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
-
-private suspend fun loadPreviewBitmap(
-    previewLoader: GalleryPreviewLoader,
-    image: GalleryImage,
-    targetSize: Size,
-): Bitmap? =
-    previewLoader.accessToken?.let { token ->
-        previewLoader.repository.loadPreview(
-            context = previewLoader.context,
-            imageLoader = previewLoader.imageLoader,
-            accessToken = token,
-            image = image,
-            targetSize = targetSize,
-        )
-    }
 
 private val VIEWER_TIMESTAMP_FORMATTER =
     DateTimeFormatter
@@ -177,14 +192,64 @@ internal fun formattedGalleryTimestamp(lastModifiedUtc: String?): String? =
 
 private fun galleryPreviewCacheKey(
     image: GalleryImage,
-    accessToken: String?,
+    cacheVariant: String,
 ): GalleryPreviewCacheKey =
     GalleryPreviewCacheKey(
+        category = image.category,
         name = image.name,
+        previewUrl = image.previewUrl,
         lastModifiedUtc = image.lastModifiedUtc,
         size = image.size,
-        accessToken = accessToken,
+        cacheVariant = cacheVariant,
     )
+
+internal fun prefetchGalleryThumbnail(
+    previewLoader: GalleryPreviewLoader,
+    image: GalleryImage,
+) {
+    prefetchGalleryPreview(
+        previewLoader = previewLoader,
+        image = image,
+        targetSize = THUMBNAIL_TARGET_SIZE,
+        cacheVariant = THUMBNAIL_CACHE_VARIANT,
+    )
+}
+
+internal fun prefetchGalleryViewerImage(
+    previewLoader: GalleryPreviewLoader,
+    image: GalleryImage,
+    placeholderMemoryCacheKey: String?,
+) {
+    prefetchGalleryPreview(
+        previewLoader = previewLoader,
+        image = image,
+        targetSize = VIEWER_TARGET_SIZE,
+        cacheVariant = VIEWER_CACHE_VARIANT,
+        placeholderMemoryCacheKey = placeholderMemoryCacheKey,
+    )
+}
+
+private fun prefetchGalleryPreview(
+    previewLoader: GalleryPreviewLoader,
+    image: GalleryImage,
+    targetSize: Size,
+    cacheVariant: String,
+    placeholderMemoryCacheKey: String? = null,
+) {
+    val token = previewLoader.accessToken ?: return
+    val request =
+        previewLoader
+            .repository
+            .previewRequestSpecs(image, cacheVariant)
+            .firstOrNull()
+            ?.toImageRequest(
+                context = previewLoader.context,
+                accessToken = token,
+                targetSize = targetSize,
+                placeholderMemoryCacheKey = placeholderMemoryCacheKey,
+            ) ?: return
+    previewLoader.imageLoader.enqueue(request)
+}
 
 @Suppress("FunctionNaming", "LongParameterList", "ktlint:standard:function-naming")
 @Composable
@@ -276,8 +341,9 @@ private fun GalleryViewerPreview(
             GalleryPreviewOptions(
                 contentScale = ContentScale.Fit,
                 placeholder = stringResource(R.string.gallery_image_unavailable),
-                initialBitmap = selection.bitmap,
                 targetSize = VIEWER_TARGET_SIZE,
+                cacheVariant = VIEWER_CACHE_VARIANT,
+                placeholderMemoryCacheKey = selection.placeholderMemoryCacheKey,
             ),
     )
 }

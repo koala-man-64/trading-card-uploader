@@ -15,6 +15,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
@@ -68,6 +75,10 @@ private object Routes {
     const val MONITOR = "monitor"
 }
 
+private const val TAB_TRANSITION_MS = 120
+private const val TAB_EXIT_TRANSITION_MS = 90
+private const val TAB_TRANSITION_DISTANCE_DIVISOR = 16
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,21 +114,39 @@ private fun UploaderApp(
             bottomBar = { AppBottomBar(navController) },
         ) { contentPadding ->
             NavHost(navController = navController, startDestination = Routes.CAPTURE) {
-                composable(Routes.CAPTURE) {
+                composable(
+                    Routes.CAPTURE,
+                    enterTransition = { appTabEnterTransition() },
+                    exitTransition = { appTabExitTransition() },
+                    popEnterTransition = { appTabEnterTransition() },
+                    popExitTransition = { appTabExitTransition() },
+                ) {
                     CaptureRoute(
                         modifier = Modifier.padding(contentPadding),
                         repository = repository,
                         authRepository = authRepository,
                     )
                 }
-                composable(Routes.GALLERY) {
+                composable(
+                    Routes.GALLERY,
+                    enterTransition = { appTabEnterTransition() },
+                    exitTransition = { appTabExitTransition() },
+                    popEnterTransition = { appTabEnterTransition() },
+                    popExitTransition = { appTabExitTransition() },
+                ) {
                     GalleryRoute(
                         modifier = Modifier.padding(contentPadding),
                         galleryRepository = galleryRepository,
                         authRepository = authRepository,
                     )
                 }
-                composable(Routes.MONITOR) {
+                composable(
+                    Routes.MONITOR,
+                    enterTransition = { appTabEnterTransition() },
+                    exitTransition = { appTabExitTransition() },
+                    popEnterTransition = { appTabEnterTransition() },
+                    popExitTransition = { appTabExitTransition() },
+                ) {
                     MonitorRoute(
                         modifier = Modifier.padding(contentPadding),
                         galleryRepository = galleryRepository,
@@ -128,6 +157,18 @@ private fun UploaderApp(
         }
     }
 }
+
+private fun appTabEnterTransition(): EnterTransition =
+    fadeIn(animationSpec = tween(TAB_TRANSITION_MS)) +
+        slideInHorizontally(animationSpec = tween(TAB_TRANSITION_MS)) { width ->
+            width / TAB_TRANSITION_DISTANCE_DIVISOR
+        }
+
+private fun appTabExitTransition(): ExitTransition =
+    fadeOut(animationSpec = tween(TAB_EXIT_TRANSITION_MS)) +
+        slideOutHorizontally(animationSpec = tween(TAB_EXIT_TRANSITION_MS)) { width ->
+            -width / TAB_TRANSITION_DISTANCE_DIVISOR
+        }
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
