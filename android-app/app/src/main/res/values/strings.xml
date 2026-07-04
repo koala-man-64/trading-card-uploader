@@ -51,6 +51,8 @@
     <string name="gallery_select_toggle">Select image</string>
     <string name="gallery_image_unavailable">Image unavailable</string>
     <string name="gallery_image_content_description">Card image %1$s</string>
+    <string name="gallery_previous_image">Previous image</string>
+    <string name="gallery_next_image">Next image</string>
     <string name="gallery_empty_title">No %1$s images yet</string>
     <string name="gallery_empty_body">Cards you capture will show up here once they finish uploading.</string>
     <string name="gallery_confirm_title_delete">Delete %1$d %2$s?</string>
