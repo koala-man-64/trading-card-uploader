@@ -72,6 +72,52 @@ class GalleryRefreshStateTest {
     }
 
     @Test
+    fun categoryRefreshStartClearsStaleItemsWithoutCache() {
+        val state =
+            GalleryUiState(
+                category = GalleryCategory.Raw,
+                items = listOf(image("raw/a.jpg")),
+                selectedNames = setOf("raw/a.jpg"),
+                nextCursor = "next-raw",
+            )
+
+        val next = galleryStateForRefreshStart(state, GalleryCategory.Processed, GalleryRefreshReason.Category)
+
+        assertEquals(GalleryCategory.Processed, next.category)
+        assertTrue(next.items.isEmpty())
+        assertNull(next.nextCursor)
+        assertTrue(next.selectedNames.isEmpty())
+        assertTrue(next.loading)
+    }
+
+    @Test
+    fun categoryRefreshStartShowsCachedItemsWhileRefreshing() {
+        val state =
+            GalleryUiState(
+                category = GalleryCategory.Processed,
+                items = listOf(image("processed/old.jpg")),
+            )
+        val cached =
+            GallerySnapshot(
+                items = listOf(image("raw/cached.jpg")),
+                nextCursor = "next-raw",
+            )
+
+        val next =
+            galleryStateForRefreshStart(
+                state = state,
+                category = GalleryCategory.Raw,
+                reason = GalleryRefreshReason.Category,
+                cachedSnapshot = cached,
+            )
+
+        assertEquals(GalleryCategory.Raw, next.category)
+        assertEquals(listOf("raw/cached.jpg"), next.items.map { it.name })
+        assertEquals("next-raw", next.nextCursor)
+        assertTrue(next.loading)
+    }
+
+    @Test
     fun loadMoreAppendsNextPageAndDeduplicatesOverlap() {
         val state =
             GalleryUiState(

@@ -114,7 +114,7 @@ fun GalleryScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         GalleryHeader(state, onRefresh)
-        CategorySelector(state.category, enabled = !state.loading, onCategorySelected)
+        CategorySelector(state.category, onCategorySelected)
         GalleryViewModeSelector(
             selected = viewMode,
             enabled = !state.loading,
@@ -326,7 +326,6 @@ private fun GalleryHeader(
 @Composable
 private fun CategorySelector(
     selected: GalleryCategory,
-    enabled: Boolean,
     onCategorySelected: (GalleryCategory) -> Unit,
 ) {
     Surface(
@@ -345,7 +344,7 @@ private fun CategorySelector(
                         Modifier
                             .weight(1f)
                             .clip(CircleShape)
-                            .clickable(enabled = enabled) { onCategorySelected(category) },
+                            .clickable { onCategorySelected(category) },
                 ) {
                     Text(
                         categoryLabel(category),

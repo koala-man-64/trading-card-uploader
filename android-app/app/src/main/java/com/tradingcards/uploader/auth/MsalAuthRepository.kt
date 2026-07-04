@@ -18,15 +18,15 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 @Suppress("TooManyFunctions")
-class MsalAuthRepository(private val context: Context) {
+class MsalAuthRepository(private val context: Context) : GalleryAuthTokenProvider {
     private val uploadScopes = arrayOf(BuildConfig.UPLOAD_API_SCOPE)
     private val galleryScopes = arrayOf(BuildConfig.GALLERY_MANAGE_SCOPE)
 
     suspend fun acquireUploadToken(activity: Activity): String = acquireToken(activity, uploadScopes)
 
-    suspend fun acquireGalleryManageToken(activity: Activity): String = acquireToken(activity, galleryScopes)
+    override suspend fun acquireGalleryManageToken(activity: Activity): String = acquireToken(activity, galleryScopes)
 
-    suspend fun acquireGalleryManageTokenSilent(): String {
+    override suspend fun acquireGalleryManageTokenSilent(): String {
         val app = application()
         existingAccount(app) ?: error("No signed-in account is available")
         return acquireTokenSilent(app, galleryScopes)

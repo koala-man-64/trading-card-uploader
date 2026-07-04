@@ -4,7 +4,8 @@ import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tradingcards.uploader.GalleryRefreshReason
-import com.tradingcards.uploader.auth.MsalAuthRepository
+import com.tradingcards.uploader.GallerySnapshot
+import com.tradingcards.uploader.auth.GalleryAuthTokenProvider
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.galleryStateForLoadMoreFailure
 import com.tradingcards.uploader.galleryStateForLoadMoreStart
@@ -28,15 +29,23 @@ import kotlinx.coroutines.launch
 private const val GALLERY_POLL_INTERVAL_MS = 5_000L
 private const val GALLERY_POLL_FAILURE_BACKOFF_MS = 30_000L
 
+private data class PendingCategoryRefresh(
+    val activity: Activity?,
+    val category: GalleryCategory,
+)
+
 @Suppress("TooManyFunctions")
 class GalleryViewModel(
     private val repository: GalleryRepository,
-    private val authRepository: MsalAuthRepository,
+    private val authRepository: GalleryAuthTokenProvider,
 ) : ViewModel() {
     private val _state = MutableStateFlow(GalleryUiState())
     val state: StateFlow<GalleryUiState> = _state
 
+    private val gallerySnapshots = mutableMapOf<GalleryCategory, GallerySnapshot>()
+    private var pendingCategoryRefresh: PendingCategoryRefresh? = null
     private var refreshInFlight = false
+    private var refreshJob: Job? = null
     private var pollingJob: Job? = null
 
     /** Call when the gallery screen becomes visible; loads data (interactively, if needed) and (re)starts polling. */
@@ -54,9 +63,10 @@ class GalleryViewModel(
     }
 
     fun onCategorySelected(
-        activity: Activity,
+        activity: Activity? = null,
         category: GalleryCategory,
     ) {
+        if (category == _state.value.category) return
         launchRefresh(activity, category, GalleryRefreshReason.Category)
     }
 
@@ -83,19 +93,26 @@ class GalleryViewModel(
     fun onLoadMore() {
         val current = _state.value
         val cursor = current.nextCursor ?: return
-        if (current.loading || current.loadingMore || refreshInFlight) return
+        val category = current.category
+        if (current.loading || current.loadingMore || isRefreshActive()) return
         _state.value = galleryStateForLoadMoreStart(current)
         viewModelScope.launch {
             runCatching {
                 val token = authRepository.acquireGalleryManageTokenSilent()
-                repository.list(token, current.category, cursor)
+                repository.list(token, category, cursor)
             }.fold(
                 onSuccess = { page ->
-                    _state.value = galleryStateForLoadMoreSuccess(_state.value, page)
+                    if (isRefreshResultCurrent(category)) {
+                        val next = galleryStateForLoadMoreSuccess(_state.value, page)
+                        _state.value = next
+                        rememberSnapshot(category, next)
+                    }
                 },
                 onFailure = { error ->
                     throwIfCancellation(error)
-                    _state.value = galleryStateForLoadMoreFailure(_state.value, error.message)
+                    if (isRefreshResultCurrent(category)) {
+                        _state.value = galleryStateForLoadMoreFailure(_state.value, error.message)
+                    }
                 },
             )
         }
@@ -123,22 +140,37 @@ class GalleryViewModel(
                 var nextDelayMs = GALLERY_POLL_INTERVAL_MS
                 while (true) {
                     delay(nextDelayMs)
-                    if (_state.value.loading || refreshInFlight) {
+                    if (_state.value.loading || isRefreshActive()) {
                         nextDelayMs = GALLERY_POLL_INTERVAL_MS
                         continue
                     }
                     val refreshed = refreshGallery(_state.value.category, GalleryRefreshReason.Poll, activity = null)
+                    drainPendingCategoryRefresh()
                     nextDelayMs = if (refreshed) GALLERY_POLL_INTERVAL_MS else GALLERY_POLL_FAILURE_BACKOFF_MS
                 }
             }
     }
 
     private fun launchRefresh(
-        activity: Activity,
+        activity: Activity?,
         category: GalleryCategory = _state.value.category,
         reason: GalleryRefreshReason,
     ) {
-        viewModelScope.launch { refreshGallery(category, reason, activity) }
+        if (isRefreshActive()) {
+            if (reason == GalleryRefreshReason.Category) {
+                queueCategoryRefresh(activity, category)
+            }
+            return
+        }
+        refreshJob =
+            viewModelScope.launch {
+                try {
+                    refreshGallery(category, reason, activity)
+                    drainPendingCategoryRefresh()
+                } finally {
+                    refreshJob = null
+                }
+            }
     }
 
     private suspend fun refreshGallery(
@@ -148,25 +180,25 @@ class GalleryViewModel(
     ): Boolean {
         if (refreshInFlight) return true
         refreshInFlight = true
-        _state.value = galleryStateForRefreshStart(_state.value, category, reason)
+        _state.value = galleryStateForRefreshStart(_state.value, category, reason, gallerySnapshots[category])
         return try {
             runCatching {
-                val token =
-                    if (reason == GalleryRefreshReason.Poll) {
-                        authRepository.acquireGalleryManageTokenSilent()
-                    } else {
-                        authRepository.acquireGalleryManageToken(requireNotNull(activity))
-                    }
+                val token = acquireTokenForRefresh(reason, activity)
                 // Poll refreshes must not shrink an already-paginated grid,
                 // so they re-fetch pages down to the current depth.
                 val minItems = if (reason == GalleryRefreshReason.Poll) _state.value.items.size else 0
                 val loaded = loadGallery(token, category, repository, minItems)
-                _state.value = galleryStateForRefreshSuccess(_state.value, token, loaded, reason)
+                rememberSnapshot(loaded.selectedCategory, loaded.items, loaded.nextCursor)
+                if (isRefreshResultCurrent(category)) {
+                    _state.value = galleryStateForRefreshSuccess(_state.value, token, loaded, reason)
+                }
             }.fold(
                 onSuccess = { true },
                 onFailure = { error ->
                     throwIfCancellation(error)
-                    _state.value = galleryStateForRefreshFailure(_state.value, reason, error.message)
+                    if (isRefreshResultCurrent(category)) {
+                        _state.value = galleryStateForRefreshFailure(_state.value, reason, error.message)
+                    }
                     false
                 },
             )
@@ -175,13 +207,52 @@ class GalleryViewModel(
         }
     }
 
+    private fun queueCategoryRefresh(
+        activity: Activity?,
+        category: GalleryCategory,
+    ) {
+        pendingCategoryRefresh = PendingCategoryRefresh(activity, category)
+        _state.value =
+            galleryStateForRefreshStart(
+                state = _state.value,
+                category = category,
+                reason = GalleryRefreshReason.Category,
+                cachedSnapshot = gallerySnapshots[category],
+            )
+    }
+
+    private suspend fun drainPendingCategoryRefresh() {
+        while (true) {
+            val pending = pendingCategoryRefresh ?: return
+            pendingCategoryRefresh = null
+            if (pending.category == _state.value.category && !_state.value.loading) continue
+            refreshGallery(pending.category, GalleryRefreshReason.Category, pending.activity)
+        }
+    }
+
+    private suspend fun acquireTokenForRefresh(
+        reason: GalleryRefreshReason,
+        activity: Activity?,
+    ): String =
+        when {
+            reason == GalleryRefreshReason.Poll -> authRepository.acquireGalleryManageTokenSilent()
+            reason == GalleryRefreshReason.Category -> acquireSilentTokenOrFallback(activity)
+            _state.value.accessToken == null -> authRepository.acquireGalleryManageToken(requireNotNull(activity))
+            else -> acquireSilentTokenOrFallback(activity)
+        }
+
+    private suspend fun acquireSilentTokenOrFallback(activity: Activity?): String =
+        runCatching { authRepository.acquireGalleryManageTokenSilent() }
+            .getOrElse { authRepository.acquireGalleryManageToken(requireNotNull(activity)) }
+
     private fun runAction(
         activity: Activity,
         sourceAction: suspend (String, String) -> Unit,
         imageAction: (suspend (String, GalleryImage) -> Unit)? = null,
     ) {
-        if (refreshInFlight) return
+        if (isRefreshActive()) return
         val current = _state.value
+        val actionCategory = current.category
         val sourceNames = selectedGallerySourceNames(current.items, current.selectedNames)
         val individualImages =
             imageAction?.let { selectedGalleryIndividualDeleteImages(current.items, current.selectedNames) }.orEmpty()
@@ -203,17 +274,40 @@ class GalleryViewModel(
                         imageAction?.invoke(token, image)
                     }
                     val loaded =
-                        loadGallery(token, _state.value.category, repository, minItems = _state.value.items.size)
-                    _state.value =
-                        galleryStateForRefreshSuccess(_state.value, token, loaded, GalleryRefreshReason.Action)
+                        loadGallery(token, actionCategory, repository, minItems = current.items.size)
+                    rememberSnapshot(loaded.selectedCategory, loaded.items, loaded.nextCursor)
+                    if (isRefreshResultCurrent(actionCategory)) {
+                        _state.value =
+                            galleryStateForRefreshSuccess(_state.value, token, loaded, GalleryRefreshReason.Action)
+                    }
                 }.onFailure { error ->
                     throwIfCancellation(error)
-                    _state.value =
-                        galleryStateForRefreshFailure(_state.value, GalleryRefreshReason.Action, error.message)
+                    if (isRefreshResultCurrent(actionCategory)) {
+                        _state.value =
+                            galleryStateForRefreshFailure(_state.value, GalleryRefreshReason.Action, error.message)
+                    }
                 }
             } finally {
                 refreshInFlight = false
             }
+            drainPendingCategoryRefresh()
         }
+    }
+
+    private fun isRefreshActive(): Boolean = refreshInFlight || refreshJob?.isActive == true
+
+    private fun isRefreshResultCurrent(category: GalleryCategory): Boolean = _state.value.category == category
+
+    private fun rememberSnapshot(
+        category: GalleryCategory,
+        state: GalleryUiState,
+    ) = rememberSnapshot(category, state.items, state.nextCursor)
+
+    private fun rememberSnapshot(
+        category: GalleryCategory,
+        items: List<GalleryImage>,
+        nextCursor: String?,
+    ) {
+        gallerySnapshots[category] = GallerySnapshot(items, nextCursor)
     }
 }

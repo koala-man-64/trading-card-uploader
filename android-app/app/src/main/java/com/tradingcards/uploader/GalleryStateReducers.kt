@@ -21,6 +21,11 @@ internal data class LoadedGallery(
     val nextCursor: String?,
 )
 
+internal data class GallerySnapshot(
+    val items: List<GalleryImage>,
+    val nextCursor: String?,
+)
+
 /**
  * Loads gallery pages via the scanner's cursor pagination. Fetches one page
  * by default; when [minItems] is set (poll/action refreshes), keeps following
@@ -50,21 +55,34 @@ internal fun galleryStateForRefreshStart(
     state: GalleryUiState,
     category: GalleryCategory,
     reason: GalleryRefreshReason,
+    cachedSnapshot: GallerySnapshot? = null,
 ): GalleryUiState =
     when (reason) {
         GalleryRefreshReason.Poll -> state
         GalleryRefreshReason.Action ->
             state.copy(
                 loading = true,
+                loadingMore = false,
                 errorText = null,
             )
         GalleryRefreshReason.Initial,
-        GalleryRefreshReason.Category,
         GalleryRefreshReason.Manual,
         ->
             state.copy(
                 category = category,
                 loading = true,
+                loadingMore = false,
+                selectedNames = emptySet(),
+                nextCursor = null,
+                errorText = null,
+            )
+        GalleryRefreshReason.Category ->
+            state.copy(
+                category = category,
+                items = cachedSnapshot?.items.orEmpty(),
+                nextCursor = cachedSnapshot?.nextCursor,
+                loading = true,
+                loadingMore = false,
                 selectedNames = emptySet(),
                 errorText = null,
             )
