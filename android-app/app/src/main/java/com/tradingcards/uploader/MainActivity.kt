@@ -234,6 +234,7 @@ private fun CaptureRoute(
                     )
                 },
                 onRetry = { upload -> viewModel.retryUpload(upload.uploadId) },
+                onRemove = { upload -> viewModel.removePendingUpload(upload.uploadId) },
             ),
     )
 }
