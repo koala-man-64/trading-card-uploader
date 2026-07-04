@@ -19,6 +19,7 @@ from shared.gallery import (
     scanner_gallery_images,
     scanner_json,
     scanner_request,
+    scanner_status,
 )
 from shared.models import Claims, Problem, UploadSasRequest
 
@@ -122,6 +123,35 @@ def admin_gallery_images(req: func.HttpRequest) -> func.HttpResponse:
     except Exception:
         logging.exception("Unhandled admin gallery list failure")
         return _json_response({"error": "gallery_list_failed", "message": "Gallery images could not be listed"}, 500)
+
+
+@app.route(route="v1/admin/scanner/status", methods=["GET"])
+def admin_scanner_status(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        settings = runtime.get_settings()
+        authorization, claims = _authorized_claims(req, settings, settings.gallery_manage_scope)
+        require_gallery_admin(settings, claims)
+        payload = scanner_status(settings, authorization)
+        logging.info(
+            "Fetched scanner status",
+            extra={
+                "custom_dimensions": {
+                    "configured": payload["configured"],
+                    "reachable": payload["reachable"],
+                    "statusCode": payload["statusCode"],
+                }
+            },
+        )
+        return _json_response(payload)
+    except Problem as problem:
+        logging.warning("Scanner status rejected: %s", problem.code)
+        return _json_response(problem.to_body(), problem.status_code)
+    except Exception:
+        logging.exception("Unhandled scanner status failure")
+        return _json_response(
+            {"error": "scanner_status_failed", "message": "Scanner status could not be loaded"},
+            500,
+        )
 
 
 @app.route(route="v1/admin/gallery/image", methods=["GET"])

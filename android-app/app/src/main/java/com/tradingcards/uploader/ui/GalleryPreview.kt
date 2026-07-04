@@ -38,6 +38,11 @@ import coil.size.Size
 import com.tradingcards.uploader.R
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.model.GalleryImage
+import com.tradingcards.uploader.model.cardDisplayName
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 // Bounds decode resolution so BitmapFactory downsamples grid thumbnails
 // instead of decoding at full camera resolution on every load.
@@ -121,7 +126,10 @@ internal fun GalleryPreview(
             Image(
                 bitmap = currentBitmap.asImageBitmap(),
                 contentDescription =
-                    stringResource(R.string.gallery_image_content_description, image.name.substringAfterLast("/")),
+                    stringResource(
+                        R.string.gallery_image_content_description,
+                        image.cardDisplayName() ?: image.name.substringAfterLast("/"),
+                    ),
                 contentScale = options.contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -142,6 +150,17 @@ private suspend fun loadPreviewBitmap(
             image = image,
             targetSize = targetSize,
         )
+    }
+
+private val VIEWER_TIMESTAMP_FORMATTER =
+    DateTimeFormatter
+        .ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withZone(ZoneId.systemDefault())
+
+/** Renders the blob's ISO-8601 lastModified as a local date/time, or null when absent/unparseable. */
+internal fun formattedGalleryTimestamp(lastModifiedUtc: String?): String? =
+    lastModifiedUtc?.let { raw ->
+        runCatching { VIEWER_TIMESTAMP_FORMATTER.format(Instant.parse(raw)) }.getOrNull()
     }
 
 private fun galleryPreviewCacheKey(
@@ -172,6 +191,22 @@ internal fun GalleryImageViewerDialog(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                selection.image.cardDisplayName()?.let { cardName ->
+                    Text(
+                        cardName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
+                formattedGalleryTimestamp(selection.image.lastModifiedUtc)?.let { timestamp ->
+                    Text(
+                        timestamp,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
                 GalleryPreview(
                     image = selection.image,
                     previewLoader = previewLoader,

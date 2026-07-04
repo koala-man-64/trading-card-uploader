@@ -2,6 +2,7 @@ package com.tradingcards.uploader
 
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.model.GalleryCategory
+import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.GalleryImagesResponse
 import com.tradingcards.uploader.ui.GalleryUiState
 import kotlinx.coroutines.CancellationException
@@ -16,18 +17,34 @@ internal enum class GalleryRefreshReason {
 
 internal data class LoadedGallery(
     val selectedCategory: GalleryCategory,
-    val response: GalleryImagesResponse,
+    val items: List<GalleryImage>,
+    val nextCursor: String?,
 )
 
+/**
+ * Loads gallery pages via the scanner's cursor pagination. Fetches one page
+ * by default; when [minItems] is set (poll/action refreshes), keeps following
+ * `nextCursor` so an already-scrolled gallery keeps its loaded depth.
+ */
 internal suspend fun loadGallery(
     token: String,
     category: GalleryCategory,
     repository: GalleryRepository,
-): LoadedGallery =
-    LoadedGallery(
+    minItems: Int = 0,
+): LoadedGallery {
+    val items = mutableListOf<GalleryImage>()
+    var cursor: String? = null
+    do {
+        val page = repository.list(token, category, cursor)
+        items += page.items
+        cursor = page.nextCursor
+    } while (cursor != null && items.size < minItems)
+    return LoadedGallery(
         selectedCategory = category,
-        response = repository.list(token, category),
+        items = items.distinctBy { it.name },
+        nextCursor = cursor,
     )
+}
 
 internal fun galleryStateForRefreshStart(
     state: GalleryUiState,
@@ -59,7 +76,7 @@ internal fun galleryStateForRefreshSuccess(
     loaded: LoadedGallery,
     reason: GalleryRefreshReason,
 ): GalleryUiState {
-    val loadedNames = loaded.response.items.map { it.name }.toSet()
+    val loadedNames = loaded.items.map { it.name }.toSet()
     val selectedNames =
         if (reason == GalleryRefreshReason.Poll) {
             state.selectedNames.intersect(loadedNames)
@@ -68,13 +85,36 @@ internal fun galleryStateForRefreshSuccess(
         }
     return state.copy(
         category = loaded.selectedCategory,
-        items = loaded.response.items,
+        items = loaded.items,
+        nextCursor = loaded.nextCursor,
         selectedNames = selectedNames,
         loading = false,
+        loadingMore = false,
         errorText = null,
         accessToken = token,
     )
 }
+
+internal fun galleryStateForLoadMoreStart(state: GalleryUiState): GalleryUiState = state.copy(loadingMore = true)
+
+internal fun galleryStateForLoadMoreSuccess(
+    state: GalleryUiState,
+    page: GalleryImagesResponse,
+): GalleryUiState =
+    state.copy(
+        items = (state.items + page.items).distinctBy { it.name },
+        nextCursor = page.nextCursor,
+        loadingMore = false,
+    )
+
+internal fun galleryStateForLoadMoreFailure(
+    state: GalleryUiState,
+    message: String?,
+): GalleryUiState =
+    state.copy(
+        loadingMore = false,
+        errorText = "Couldn't load more images: ${message ?: "unknown error"}",
+    )
 
 internal fun galleryStateForRefreshFailure(
     state: GalleryUiState,

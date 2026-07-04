@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.tradingcards.uploader.GalleryRefreshReason
 import com.tradingcards.uploader.auth.MsalAuthRepository
 import com.tradingcards.uploader.data.GalleryRepository
+import com.tradingcards.uploader.galleryStateForLoadMoreFailure
+import com.tradingcards.uploader.galleryStateForLoadMoreStart
+import com.tradingcards.uploader.galleryStateForLoadMoreSuccess
 import com.tradingcards.uploader.galleryStateForRefreshFailure
 import com.tradingcards.uploader.galleryStateForRefreshStart
 import com.tradingcards.uploader.galleryStateForRefreshSuccess
@@ -76,6 +79,28 @@ class GalleryViewModel(
         _state.value = _state.value.copy(selectedNames = emptySet())
     }
 
+    /** Fetches the next page via the scanner's cursor pagination and appends it to the grid. */
+    fun onLoadMore() {
+        val current = _state.value
+        val cursor = current.nextCursor ?: return
+        if (current.loading || current.loadingMore || refreshInFlight) return
+        _state.value = galleryStateForLoadMoreStart(current)
+        viewModelScope.launch {
+            runCatching {
+                val token = authRepository.acquireGalleryManageTokenSilent()
+                repository.list(token, current.category, cursor)
+            }.fold(
+                onSuccess = { page ->
+                    _state.value = galleryStateForLoadMoreSuccess(_state.value, page)
+                },
+                onFailure = { error ->
+                    throwIfCancellation(error)
+                    _state.value = galleryStateForLoadMoreFailure(_state.value, error.message)
+                },
+            )
+        }
+    }
+
     fun onDeleteSelected(activity: Activity) {
         runAction(
             activity = activity,
@@ -132,7 +157,10 @@ class GalleryViewModel(
                     } else {
                         authRepository.acquireGalleryManageToken(requireNotNull(activity))
                     }
-                val loaded = loadGallery(token, category, repository)
+                // Poll refreshes must not shrink an already-paginated grid,
+                // so they re-fetch pages down to the current depth.
+                val minItems = if (reason == GalleryRefreshReason.Poll) _state.value.items.size else 0
+                val loaded = loadGallery(token, category, repository, minItems)
                 _state.value = galleryStateForRefreshSuccess(_state.value, token, loaded, reason)
             }.fold(
                 onSuccess = { true },
@@ -174,7 +202,8 @@ class GalleryViewModel(
                     for (image in individualImages) {
                         imageAction?.invoke(token, image)
                     }
-                    val loaded = loadGallery(token, _state.value.category, repository)
+                    val loaded =
+                        loadGallery(token, _state.value.category, repository, minItems = _state.value.items.size)
                     _state.value =
                         galleryStateForRefreshSuccess(_state.value, token, loaded, GalleryRefreshReason.Action)
                 }.onFailure { error ->

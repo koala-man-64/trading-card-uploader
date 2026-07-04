@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -52,9 +53,11 @@ import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.ui.CaptureScreen
 import com.tradingcards.uploader.ui.CaptureScreenActions
 import com.tradingcards.uploader.ui.GalleryScreen
+import com.tradingcards.uploader.ui.MonitorScreen
 import com.tradingcards.uploader.ui.theme.UploaderTheme
 import com.tradingcards.uploader.viewmodel.CaptureViewModel
 import com.tradingcards.uploader.viewmodel.GalleryViewModel
+import com.tradingcards.uploader.viewmodel.MonitorViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -62,6 +65,7 @@ import java.io.File
 private object Routes {
     const val CAPTURE = "capture"
     const val GALLERY = "gallery"
+    const val MONITOR = "monitor"
 }
 
 class MainActivity : ComponentActivity() {
@@ -113,6 +117,13 @@ private fun UploaderApp(
                         authRepository = authRepository,
                     )
                 }
+                composable(Routes.MONITOR) {
+                    MonitorRoute(
+                        modifier = Modifier.padding(contentPadding),
+                        galleryRepository = galleryRepository,
+                        authRepository = authRepository,
+                    )
+                }
             }
         }
     }
@@ -134,6 +145,12 @@ private fun AppBottomBar(navController: NavHostController) {
             onClick = { navController.navigateToTab(Routes.GALLERY) },
             label = { Text(stringResource(R.string.nav_gallery)) },
             icon = { Icon(Icons.Default.Collections, contentDescription = null) },
+        )
+        NavigationBarItem(
+            selected = currentRoute == Routes.MONITOR,
+            onClick = { navController.navigateToTab(Routes.MONITOR) },
+            label = { Text(stringResource(R.string.nav_monitor)) },
+            icon = { Icon(Icons.Default.Insights, contentDescription = null) },
         )
     }
 }
@@ -253,6 +270,36 @@ private fun GalleryRoute(
         onClearSelection = viewModel::onClearSelection,
         onDeleteSelected = { viewModel.onDeleteSelected(activity) },
         onReprocessSelected = { viewModel.onReprocessSelected(activity) },
+        onLoadMore = viewModel::onLoadMore,
+    )
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun MonitorRoute(
+    modifier: Modifier,
+    galleryRepository: GalleryRepository,
+    authRepository: MsalAuthRepository,
+) {
+    val activity = LocalContext.current as Activity
+    val viewModel: MonitorViewModel =
+        viewModel(
+            factory =
+                viewModelFactory {
+                    initializer { MonitorViewModel(galleryRepository, authRepository) }
+                },
+        )
+    val state by viewModel.state.collectAsState()
+
+    DisposableEffect(viewModel) {
+        viewModel.onScreenEntered(activity)
+        onDispose { viewModel.onScreenExited() }
+    }
+
+    MonitorScreen(
+        modifier = modifier,
+        state = state,
+        onRefresh = { viewModel.onRefresh(activity) },
     )
 }
 

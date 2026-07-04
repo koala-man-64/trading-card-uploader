@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,15 +27,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tradingcards.uploader.R
 import com.tradingcards.uploader.model.GalleryImage
+import com.tradingcards.uploader.model.cardDisplayName
 
 internal const val TILE_ASPECT_RATIO = 3f / 4f
 private const val TOGGLE_SCRIM_ALPHA = 0.35f
 private const val TOGGLE_RING_ALPHA = 0.9f
+private const val NAME_SCRIM_ALPHA = 0.55f
 
 @Suppress("ktlint:standard:property-naming")
 internal val TileShape = RoundedCornerShape(14.dp)
@@ -80,6 +85,15 @@ internal fun GalleryImageTile(
                 onBitmapLoaded = { previewBitmap = it },
                 modifier = Modifier.fillMaxSize(),
             )
+            image.cardDisplayName()?.let { cardName ->
+                CardNameLabel(
+                    name = cardName,
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth(),
+                )
+            }
             SelectionToggle(
                 selected = selected,
                 onToggle = onToggleSelected,
@@ -90,6 +104,30 @@ internal fun GalleryImageTile(
             )
         }
     }
+}
+
+/**
+ * Overlays the card name the scanner's OCR pass baked into the crop's blob
+ * name, so processed/segmented tiles identify the card at a glance.
+ */
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun CardNameLabel(
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    val scrim = MaterialTheme.colorScheme.scrim.copy(alpha = NAME_SCRIM_ALPHA)
+    Text(
+        name,
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.White,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier =
+            modifier
+                .background(Brush.verticalGradient(listOf(Color.Transparent, scrim)))
+                .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 6.dp),
+    )
 }
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")

@@ -28,6 +28,7 @@ The API does not proxy image bytes. It only validates the caller, chooses a serv
 - Idempotency manifests are written under `manifests/{tenantHash}/{userHash}/{clientUploadId}.json`.
 - `trading-card-scanner` must watch only the `raw/` prefix of this upload container.
 - The scanner owns crop extraction and gallery output; this repo owns capture, authentication, and write-only upload authorization.
+- The SAS issuer proxies two read paths from the scanner for gallery-admin callers: gallery listings (`v1/admin/gallery/*`) and readiness (`GET v1/admin/scanner/status`, which wraps the scanner's `/api/ready` and reports `configured`/`reachable`/`ready` plus the scanner's component payload verbatim). The Android Monitor tab consumes the status endpoint and joins raw uploads to processed crops via `sourceBlobName`, which the scanner derives from its lineage manifests.
 
 ## Trust Boundary
 

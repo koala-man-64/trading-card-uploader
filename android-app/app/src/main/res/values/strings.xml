@@ -4,6 +4,7 @@
 
     <string name="nav_capture">Capture</string>
     <string name="nav_gallery">Gallery</string>
+    <string name="nav_monitor">Monitor</string>
 
     <string name="capture_title">Your cards</string>
     <string name="capture_signed_in">Signed in</string>
@@ -26,6 +27,7 @@
         <item quantity="one">%1$d image</item>
         <item quantity="other">%1$d images</item>
     </plurals>
+    <string name="gallery_image_count_more">%1$d+ images</string>
     <string name="gallery_category_raw">Raw</string>
     <string name="gallery_category_processed">Processed</string>
     <string name="gallery_category_segmented">Segmented</string>
@@ -47,4 +49,27 @@
     <string name="gallery_confirm_body_reprocess">This re-runs processing on the selected %1$s and replaces any existing output.</string>
     <string name="gallery_item_singular">item</string>
     <string name="gallery_item_plural">items</string>
+
+    <string name="monitor_title">Scanner</string>
+    <string name="monitor_status_heading">Scanner status</string>
+    <string name="monitor_health_ready">Ready</string>
+    <string name="monitor_health_warming">Warming up</string>
+    <string name="monitor_health_not_ready">Not ready</string>
+    <string name="monitor_health_unreachable">Unreachable</string>
+    <string name="monitor_health_not_configured">Not configured</string>
+    <string name="monitor_http_status">HTTP %1$d</string>
+    <string name="monitor_activity_heading">Processing activity</string>
+    <string name="monitor_activity_empty">No uploads yet. Cards you capture will show up here as the scanner processes them.</string>
+    <plurals name="monitor_source_count">
+        <item quantity="one">%1$d upload tracked</item>
+        <item quantity="other">%1$d uploads tracked</item>
+    </plurals>
+    <plurals name="monitor_cards_extracted">
+        <item quantity="one">%1$d card extracted</item>
+        <item quantity="other">%1$d cards extracted</item>
+    </plurals>
+    <string name="monitor_awaiting_processing">No processed output yet</string>
+    <string name="monitor_uploaded_at">Uploaded %1$s</string>
+    <string name="monitor_processed_at">Processed %1$s</string>
+    <string name="monitor_source_removed">Original photo removed</string>
 </resources>

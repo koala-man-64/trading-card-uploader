@@ -69,6 +69,33 @@ data class GalleryImagesResponse(
     val nextCursor: String?,
 )
 
+// Scanner crops are uploaded as {CardName}_{cropIndex}.jpg, where CardName
+// comes from the scanner's on-device OCR pass over the top of each card.
+private val CROP_INDEX_SUFFIX_REGEX = Regex("_\\d+$")
+
+// Raw uploads and hash-derived blob names (UUIDs, sha256 stems) carry no
+// human-meaningful text and must never leak into the UI.
+private val MACHINE_NAME_REGEX = Regex("^[0-9a-fA-F-]{16,}$")
+
+private val WORD_SEPARATOR_REGEX = Regex("[_\\s]+")
+
+/**
+ * Recovers the card name the scanner's OCR encoded into the blob filename
+ * (`processed/{folder}/{CardName}_{idx}.jpg`), or null when the name is
+ * machine-generated (raw upload UUIDs, hashes) and has nothing to show.
+ */
+fun GalleryImage.cardDisplayName(): String? {
+    val stem = name.substringAfterLast('/').substringBeforeLast('.')
+    val base = CROP_INDEX_SUFFIX_REGEX.replace(stem, "")
+    if (base.isBlank() || MACHINE_NAME_REGEX.matches(base)) {
+        return null
+    }
+    return WORD_SEPARATOR_REGEX
+        .replace(base, " ")
+        .trim()
+        .takeIf { it.isNotEmpty() }
+}
+
 data class GallerySourceActionRequest(
     val sourceBlobName: String,
 )

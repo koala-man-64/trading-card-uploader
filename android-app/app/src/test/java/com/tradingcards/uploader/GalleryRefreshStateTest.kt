@@ -72,6 +72,49 @@ class GalleryRefreshStateTest {
     }
 
     @Test
+    fun loadMoreAppendsNextPageAndDeduplicatesOverlap() {
+        val state =
+            GalleryUiState(
+                category = GalleryCategory.Processed,
+                items = listOf(image("processed/a_0.jpg"), image("processed/b_0.jpg")),
+                nextCursor = "2",
+                loadingMore = true,
+            )
+        val page =
+            GalleryImagesResponse(
+                category = GalleryCategory.Processed.wireValue,
+                items = listOf(image("processed/b_0.jpg"), image("processed/c_0.jpg")),
+                nextCursor = null,
+            )
+
+        val next = galleryStateForLoadMoreSuccess(state, page)
+
+        assertEquals(
+            listOf("processed/a_0.jpg", "processed/b_0.jpg", "processed/c_0.jpg"),
+            next.items.map { it.name },
+        )
+        assertNull(next.nextCursor)
+        assertFalse(next.loadingMore)
+    }
+
+    @Test
+    fun loadMoreFailureKeepsLoadedItemsAndSurfacesError() {
+        val state =
+            GalleryUiState(
+                items = listOf(image("raw/a.jpg")),
+                nextCursor = "1",
+                loadingMore = true,
+            )
+
+        val next = galleryStateForLoadMoreFailure(state, "boom")
+
+        assertEquals(listOf("raw/a.jpg"), next.items.map { it.name })
+        assertEquals("1", next.nextCursor)
+        assertFalse(next.loadingMore)
+        assertEquals("Couldn't load more images: boom", next.errorText)
+    }
+
+    @Test
     fun refreshFailureSurfacesErrorAndStopsLoading() {
         val state = GalleryUiState(loading = true)
 
@@ -101,12 +144,8 @@ class GalleryRefreshStateTest {
     private fun loadedGallery(vararg images: GalleryImage): LoadedGallery =
         LoadedGallery(
             selectedCategory = GalleryCategory.Raw,
-            response =
-                GalleryImagesResponse(
-                    category = GalleryCategory.Raw.wireValue,
-                    items = images.toList(),
-                    nextCursor = null,
-                ),
+            items = images.toList(),
+            nextCursor = null,
         )
 
     private fun image(name: String): GalleryImage =
