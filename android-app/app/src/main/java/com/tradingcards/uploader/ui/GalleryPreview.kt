@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +15,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -29,7 +36,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -46,6 +55,7 @@ private const val THUMBNAIL_TARGET_HEIGHT_PX = 480
 private const val VIEWER_TARGET_EDGE_PX = 1080
 private val THUMBNAIL_TARGET_SIZE = Size(THUMBNAIL_TARGET_WIDTH_PX, THUMBNAIL_TARGET_HEIGHT_PX)
 private val VIEWER_TARGET_SIZE = Size(VIEWER_TARGET_EDGE_PX, VIEWER_TARGET_EDGE_PX)
+private val VIEWER_SWIPE_THRESHOLD = 72.dp
 
 internal data class GalleryPreviewLoader(
     val accessToken: String?,
@@ -155,11 +165,15 @@ private fun galleryPreviewCacheKey(
         accessToken = accessToken,
     )
 
-@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Suppress("FunctionNaming", "LongParameterList", "ktlint:standard:function-naming")
 @Composable
 internal fun GalleryImageViewerDialog(
     selection: ViewedGalleryImage,
     previewLoader: GalleryPreviewLoader,
+    canNavigatePrevious: Boolean,
+    canNavigateNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -172,31 +186,124 @@ internal fun GalleryImageViewerDialog(
                 modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                GalleryPreview(
-                    image = selection.image,
+                GalleryViewerPreview(
+                    selection = selection,
                     previewLoader = previewLoader,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .heightIn(min = 240.dp, max = 560.dp),
-                    options =
-                        GalleryPreviewOptions(
-                            contentScale = ContentScale.Fit,
-                            placeholder = stringResource(R.string.gallery_image_unavailable),
-                            initialBitmap = selection.bitmap,
-                            targetSize = VIEWER_TARGET_SIZE,
-                        ),
+                    canNavigatePrevious = canNavigatePrevious,
+                    canNavigateNext = canNavigateNext,
+                    onPrevious = onPrevious,
+                    onNext = onNext,
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.gallery_close))
-                    }
-                }
+                GalleryViewerControls(
+                    canNavigatePrevious = canNavigatePrevious,
+                    canNavigateNext = canNavigateNext,
+                    onPrevious = onPrevious,
+                    onNext = onNext,
+                    onDismiss = onDismiss,
+                )
             }
         }
+    }
+}
+
+@Suppress("FunctionNaming", "LongParameterList", "ktlint:standard:function-naming")
+@Composable
+private fun GalleryViewerPreview(
+    selection: ViewedGalleryImage,
+    previewLoader: GalleryPreviewLoader,
+    canNavigatePrevious: Boolean,
+    canNavigateNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    GalleryPreview(
+        image = selection.image,
+        previewLoader = previewLoader,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .heightIn(min = 240.dp, max = 560.dp)
+                .galleryViewerSwipeNavigation(
+                    imageName = selection.image.name,
+                    canNavigatePrevious = canNavigatePrevious,
+                    canNavigateNext = canNavigateNext,
+                    onPrevious = onPrevious,
+                    onNext = onNext,
+                ),
+        options =
+            GalleryPreviewOptions(
+                contentScale = ContentScale.Fit,
+                placeholder = stringResource(R.string.gallery_image_unavailable),
+                initialBitmap = selection.bitmap,
+                targetSize = VIEWER_TARGET_SIZE,
+            ),
+    )
+}
+
+@Suppress("FunctionNaming", "LongParameterList", "ktlint:standard:function-naming")
+@Composable
+private fun GalleryViewerControls(
+    canNavigatePrevious: Boolean,
+    canNavigateNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onPrevious,
+            enabled = canNavigatePrevious,
+        ) {
+            Icon(
+                Icons.Default.ChevronLeft,
+                contentDescription = stringResource(R.string.gallery_previous_image),
+            )
+        }
+        TextButton(onClick = onDismiss) {
+            Text(stringResource(R.string.gallery_close))
+        }
+        IconButton(
+            onClick = onNext,
+            enabled = canNavigateNext,
+        ) {
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = stringResource(R.string.gallery_next_image),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Modifier.galleryViewerSwipeNavigation(
+    imageName: String,
+    canNavigatePrevious: Boolean,
+    canNavigateNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+): Modifier {
+    var horizontalDrag by remember(imageName) { mutableFloatStateOf(0f) }
+    val swipeThreshold = with(LocalDensity.current) { VIEWER_SWIPE_THRESHOLD.toPx() }
+    return pointerInput(imageName, canNavigatePrevious, canNavigateNext) {
+        detectHorizontalDragGestures(
+            onDragStart = { horizontalDrag = 0f },
+            onHorizontalDrag = { _, dragAmount ->
+                horizontalDrag += dragAmount
+            },
+            onDragEnd = {
+                val completedDrag = horizontalDrag
+                horizontalDrag = 0f
+                when {
+                    completedDrag <= -swipeThreshold && canNavigateNext -> onNext()
+                    completedDrag >= swipeThreshold && canNavigatePrevious -> onPrevious()
+                }
+            },
+            onDragCancel = { horizontalDrag = 0f },
+        )
     }
 }
