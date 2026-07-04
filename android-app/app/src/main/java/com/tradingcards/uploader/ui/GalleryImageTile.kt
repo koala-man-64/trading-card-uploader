@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.tradingcards.uploader.R
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.cardDisplayName
+import com.tradingcards.uploader.model.cardPriceText
 
 internal const val TILE_ASPECT_RATIO = 3f / 4f
 private const val TOGGLE_SCRIM_ALPHA = 0.35f
@@ -85,15 +87,14 @@ internal fun GalleryImageTile(
                 onBitmapLoaded = { previewBitmap = it },
                 modifier = Modifier.fillMaxSize(),
             )
-            image.cardDisplayName()?.let { cardName ->
-                CardNameLabel(
-                    name = cardName,
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomStart)
-                            .fillMaxWidth(),
-                )
-            }
+            CardMetadataLabel(
+                name = image.cardDisplayName() ?: stringResource(R.string.gallery_unknown_card),
+                price = image.cardPriceText() ?: stringResource(R.string.gallery_no_price),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(),
+            )
             SelectionToggle(
                 selected = selected,
                 onToggle = onToggleSelected,
@@ -107,27 +108,38 @@ internal fun GalleryImageTile(
 }
 
 /**
- * Overlays the card name the scanner's OCR pass baked into the crop's blob
- * name, so processed/segmented tiles identify the card at a glance.
+ * Overlays scanner-extracted metadata so processed/segmented tiles identify
+ * the card at a glance.
  */
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
-private fun CardNameLabel(
+private fun CardMetadataLabel(
     name: String,
+    price: String,
     modifier: Modifier = Modifier,
 ) {
     val scrim = MaterialTheme.colorScheme.scrim.copy(alpha = NAME_SCRIM_ALPHA)
-    Text(
-        name,
-        style = MaterialTheme.typography.labelSmall,
-        color = Color.White,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+    Column(
         modifier =
             modifier
                 .background(Brush.verticalGradient(listOf(Color.Transparent, scrim)))
                 .padding(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 6.dp),
-    )
+    ) {
+        Text(
+            name,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            price,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")

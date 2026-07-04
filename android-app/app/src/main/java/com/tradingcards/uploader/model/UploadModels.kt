@@ -61,6 +61,8 @@ data class GalleryImage(
     val lastModifiedUtc: String?,
     val previewUrl: String,
     val canCascade: Boolean,
+    val cardName: String? = null,
+    val price: String? = null,
 )
 
 data class GalleryImagesResponse(
@@ -69,32 +71,50 @@ data class GalleryImagesResponse(
     val nextCursor: String?,
 )
 
-// Scanner crops are uploaded as {CardName}_{cropIndex}.jpg, where CardName
-// comes from the scanner's on-device OCR pass over the top of each card.
-private val CROP_INDEX_SUFFIX_REGEX = Regex("_\\d+$")
+data class GalleryCardGroup(
+    val cardName: String?,
+    val items: List<GalleryImage>,
+    val priceSummary: String?,
+)
 
-// Raw uploads and hash-derived blob names (UUIDs, sha256 stems) carry no
-// human-meaningful text and must never leak into the UI.
-private val MACHINE_NAME_REGEX = Regex("^[0-9a-fA-F-]{16,}$")
+const val MULTIPLE_PRICES_SUMMARY = "Multiple prices"
 
-private val WORD_SEPARATOR_REGEX = Regex("[_\\s]+")
+private val WHITESPACE_REGEX = Regex("\\s+")
 
-/**
- * Recovers the card name the scanner's OCR encoded into the blob filename
- * (`processed/{folder}/{CardName}_{idx}.jpg`), or null when the name is
- * machine-generated (raw upload UUIDs, hashes) and has nothing to show.
- */
-fun GalleryImage.cardDisplayName(): String? {
-    val stem = name.substringAfterLast('/').substringBeforeLast('.')
-    val base = CROP_INDEX_SUFFIX_REGEX.replace(stem, "")
-    if (base.isBlank() || MACHINE_NAME_REGEX.matches(base)) {
-        return null
+fun GalleryImage.cardDisplayName(): String? = normalizedMetadataText(cardName)
+
+fun GalleryImage.cardPriceText(): String? = normalizedMetadataText(price)
+
+fun groupedGalleryImagesByCardName(items: List<GalleryImage>): List<GalleryCardGroup> =
+    items
+        .groupBy { image -> image.cardDisplayName()?.lowercase() }
+        .map { (_, groupItems) ->
+            val sortedItems = groupItems.sortedBy { it.name }
+            val displayName = sortedItems.firstNotNullOfOrNull { it.cardDisplayName() }
+            GalleryCardGroup(
+                cardName = displayName,
+                items = sortedItems,
+                priceSummary = priceSummary(sortedItems),
+            )
+        }.sortedWith(
+            compareBy<GalleryCardGroup> { it.cardName == null }
+                .thenBy { it.cardName?.lowercase().orEmpty() },
+        )
+
+private fun priceSummary(items: List<GalleryImage>): String? {
+    val prices = items.mapNotNull { it.cardPriceText() }.distinct()
+    return when (prices.size) {
+        0 -> null
+        1 -> prices.single()
+        else -> MULTIPLE_PRICES_SUMMARY
     }
-    return WORD_SEPARATOR_REGEX
-        .replace(base, " ")
-        .trim()
-        .takeIf { it.isNotEmpty() }
 }
+
+private fun normalizedMetadataText(value: String?): String? =
+    value
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { WHITESPACE_REGEX.replace(it, " ") }
 
 data class GallerySourceActionRequest(
     val sourceBlobName: String,

@@ -31,11 +31,21 @@
     <string name="gallery_category_raw">Raw</string>
     <string name="gallery_category_processed">Processed</string>
     <string name="gallery_category_segmented">Segmented</string>
+    <string name="gallery_view_individual">Individual</string>
+    <string name="gallery_view_grouped">Grouped</string>
     <string name="gallery_refresh">Refresh</string>
     <string name="gallery_delete">Delete</string>
     <string name="gallery_reprocess">Reprocess</string>
     <string name="gallery_cancel">Cancel</string>
     <string name="gallery_close">Close</string>
+    <string name="gallery_unknown_card">Unknown card</string>
+    <string name="gallery_no_price">No price</string>
+    <string name="gallery_multiple_prices">Multiple prices</string>
+    <plurals name="gallery_group_card_count">
+        <item quantity="one">%1$d card</item>
+        <item quantity="other">%1$d cards</item>
+    </plurals>
+    <string name="gallery_group_summary">%1$s - %2$s</string>
     <string name="gallery_selected_count">%1$d selected</string>
     <string name="gallery_clear_selection">Clear selection</string>
     <string name="gallery_select_toggle">Select image</string>
