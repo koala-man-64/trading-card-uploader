@@ -2,6 +2,7 @@ package com.tradingcards.uploader.data
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.room.Room
 import androidx.room.migration.Migration
@@ -72,10 +73,21 @@ class UploadRepository(
         return true
     }
 
+    suspend fun removePending(uploadId: String): Boolean {
+        val entity = dao.get(uploadId)
+        val deleted = entity != null && dao.deletePending(uploadId, UploadStatus.Complete) > 0
+        if (deleted) {
+            WorkManager.getInstance(context).cancelAllWorkByTag(uploadWorkTag(uploadId))
+            deleteLocalCopy(requireNotNull(entity).localUri)
+        }
+        return deleted
+    }
+
     private fun enqueueWorker(uploadId: String) {
         val request =
             OneTimeWorkRequestBuilder<UploadWorker>()
                 .setInputData(Data.Builder().putString(UploadWorker.KEY_UPLOAD_ID, uploadId).build())
+                .addTag(uploadWorkTag(uploadId))
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -83,6 +95,15 @@ class UploadRepository(
                 )
                 .build()
         WorkManager.getInstance(context).enqueue(request)
+    }
+
+    private fun deleteLocalCopy(localUri: String) {
+        val uri = Uri.parse(localUri)
+        runCatching {
+            context.applicationContext.contentResolver.delete(uri, null, null)
+        }.onFailure { error ->
+            Log.w(UPLOAD_REPOSITORY_LOG_TAG, "Unable to delete local upload copy: $localUri", error)
+        }
     }
 
     suspend fun enqueueSelectedPhoto(sourceUri: Uri): String {
@@ -158,6 +179,10 @@ class UploadRepository(
             }
     }
 }
+
+internal fun uploadWorkTag(uploadId: String): String = "upload:$uploadId"
+
+private const val UPLOAD_REPOSITORY_LOG_TAG = "UploadRepository"
 
 private data class PendingSelectedPhoto(
     val file: File,

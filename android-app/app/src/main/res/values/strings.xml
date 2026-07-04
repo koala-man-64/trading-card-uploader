@@ -15,6 +15,7 @@
     <string name="capture_recent_heading">Recent</string>
     <string name="capture_row_title">Card photo</string>
     <string name="capture_retry">Retry</string>
+    <string name="capture_remove">Remove</string>
     <string name="capture_empty_title">Capture your first card</string>
     <string name="capture_empty_body">Cards you capture or pick from Photos upload automatically and show up here.</string>
     <string name="capture_action_capture">Capture card</string>
@@ -51,6 +52,8 @@
     <string name="gallery_select_toggle">Select image</string>
     <string name="gallery_image_unavailable">Image unavailable</string>
     <string name="gallery_image_content_description">Card image %1$s</string>
+    <string name="gallery_previous_image">Previous image</string>
+    <string name="gallery_next_image">Next image</string>
     <string name="gallery_empty_title">No %1$s images yet</string>
     <string name="gallery_empty_body">Cards you capture will show up here once they finish uploading.</string>
     <string name="gallery_confirm_title_delete">Delete %1$d %2$s?</string>

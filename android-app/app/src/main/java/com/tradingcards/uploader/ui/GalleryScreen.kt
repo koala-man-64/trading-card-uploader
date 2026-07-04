@@ -2,6 +2,14 @@
 
 package com.tradingcards.uploader.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,8 +23,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -38,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,12 +62,14 @@ import androidx.compose.ui.unit.dp
 import com.tradingcards.uploader.R
 import com.tradingcards.uploader.data.GalleryRepository
 import com.tradingcards.uploader.data.NetworkClients
+import com.tradingcards.uploader.data.galleryPreviewMemoryCacheKey
 import com.tradingcards.uploader.model.GalleryCardGroup
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.MULTIPLE_PRICES_SUMMARY
 import com.tradingcards.uploader.model.groupedGalleryImagesByCardName
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 private enum class PendingGalleryAction {
     Delete,
@@ -68,13 +81,25 @@ private enum class GalleryViewMode {
     Grouped,
 }
 
+private data class GalleryContentTransitionKey(
+    val category: GalleryCategory,
+    val viewMode: GalleryViewMode,
+    val loadingEmpty: Boolean,
+    val empty: Boolean,
+)
+
 private const val SKELETON_TILE_COUNT = 9
 private const val LOAD_MORE_RETRY_INTERVAL_MS = 3_000L
+private const val CONTENT_TRANSITION_MS = 120
+private const val CONTENT_EXIT_TRANSITION_MS = 90
+private const val CONTENT_TRANSITION_DISTANCE_DIVISOR = 16
+private const val GRID_PREFETCH_EXTRA_ITEMS = 8
 private const val GROUP_THUMBNAIL_LIMIT = 4
 private const val GROUP_THUMBNAIL_WIDTH_DP = 42
 private const val GROUP_THUMBNAIL_HEIGHT_DP = 56
 
 @Suppress(
+    "CyclomaticComplexMethod",
     "FunctionNaming",
     "LongMethod",
     "LongParameterList",
@@ -125,8 +150,10 @@ fun GalleryScreen(
                 viewMode = selected
             },
         )
-        state.errorText?.let { ErrorNotice(it) }
-        if (selectedCount > 0 && viewMode == GalleryViewMode.Individual) {
+        AnimatedVisibility(visible = state.errorText != null) {
+            state.errorText?.let { ErrorNotice(it) }
+        }
+        AnimatedVisibility(visible = selectedCount > 0 && viewMode == GalleryViewMode.Individual) {
             SelectionBar(
                 selectedCount = selectedCount,
                 enabled = !state.loading,
@@ -135,26 +162,55 @@ fun GalleryScreen(
                 onClear = onClearSelection,
             )
         }
-        when {
-            state.loading && state.items.isEmpty() -> GallerySkeletonGrid()
-            state.items.isEmpty() -> GalleryEmptyState(state.category, onRefresh)
-            viewMode == GalleryViewMode.Grouped ->
-                GroupedGalleryGrid(
-                    groups = groupedGalleryImagesByCardName(state.items),
-                    previewLoader = previewLoader,
-                    onViewImage = { image, bitmap -> viewingImage = ViewedGalleryImage(image, bitmap) },
-                    nextCursor = state.nextCursor,
-                    onLoadMore = onLoadMore,
+        AnimatedContent(
+            targetState =
+                GalleryContentTransitionKey(
+                    category = state.category,
+                    viewMode = viewMode,
+                    loadingEmpty = state.loading && state.items.isEmpty(),
+                    empty = state.items.isEmpty(),
+                ),
+            modifier = Modifier.weight(1f),
+            transitionSpec = {
+                (
+                    fadeIn(animationSpec = tween(CONTENT_TRANSITION_MS)) +
+                        slideInHorizontally(animationSpec = tween(CONTENT_TRANSITION_MS)) { width ->
+                            width / CONTENT_TRANSITION_DISTANCE_DIVISOR
+                        }
+                ).togetherWith(
+                    fadeOut(animationSpec = tween(CONTENT_EXIT_TRANSITION_MS)) +
+                        slideOutHorizontally(animationSpec = tween(CONTENT_EXIT_TRANSITION_MS)) { width ->
+                            -width / CONTENT_TRANSITION_DISTANCE_DIVISOR
+                        },
                 )
-            else ->
-                IndividualGalleryGrid(
-                    state = state,
-                    previewLoader = previewLoader,
-                    selectedCount = selectedCount,
-                    onToggleSelected = onToggleSelected,
-                    onViewImage = { image, bitmap -> viewingImage = ViewedGalleryImage(image, bitmap) },
-                    onLoadMore = onLoadMore,
-                )
+            },
+            label = "gallery-content",
+        ) { target ->
+            when {
+                target.loadingEmpty -> GallerySkeletonGrid()
+                target.empty -> GalleryEmptyState(target.category, onRefresh)
+                target.viewMode == GalleryViewMode.Grouped ->
+                    GroupedGalleryGrid(
+                        groups = groupedGalleryImagesByCardName(state.items),
+                        previewLoader = previewLoader,
+                        onViewImage = { image, memoryCacheKey ->
+                            viewingImage = ViewedGalleryImage(image, memoryCacheKey)
+                        },
+                        nextCursor = state.nextCursor,
+                        onLoadMore = onLoadMore,
+                    )
+                else ->
+                    IndividualGalleryGrid(
+                        state = state,
+                        previewLoader = previewLoader,
+                        selectedCount = selectedCount,
+                        onToggleSelected = onToggleSelected,
+                        onViewImage = { image, memoryCacheKey ->
+                            viewingImage = ViewedGalleryImage(image, memoryCacheKey)
+                        },
+                        onLoadMore = onLoadMore,
+                    )
+            }
         }
     }
 
@@ -175,9 +231,48 @@ fun GalleryScreen(
     }
 
     viewingImage?.let { selection ->
+        val previousImage =
+            adjacentGalleryImage(
+                state.items,
+                selection.image.name,
+                GalleryImageNavigationDirection.Previous,
+            )
+        val nextImage =
+            adjacentGalleryImage(
+                state.items,
+                selection.image.name,
+                GalleryImageNavigationDirection.Next,
+            )
+        LaunchedEffect(
+            selection.image.name,
+            selection.placeholderMemoryCacheKey,
+            previousImage?.name,
+            nextImage?.name,
+            previewLoader.accessToken,
+        ) {
+            prefetchGalleryViewerImage(previewLoader, selection.image, selection.placeholderMemoryCacheKey)
+            previousImage?.let {
+                prefetchGalleryViewerImage(previewLoader, it, galleryPreviewMemoryCacheKey(it, THUMBNAIL_CACHE_VARIANT))
+            }
+            nextImage?.let {
+                prefetchGalleryViewerImage(previewLoader, it, galleryPreviewMemoryCacheKey(it, THUMBNAIL_CACHE_VARIANT))
+            }
+        }
         GalleryImageViewerDialog(
             selection = selection,
             previewLoader = previewLoader,
+            canNavigatePrevious = previousImage != null,
+            canNavigateNext = nextImage != null,
+            onPrevious = {
+                previousImage?.let {
+                    viewingImage = ViewedGalleryImage(it, galleryPreviewMemoryCacheKey(it, THUMBNAIL_CACHE_VARIANT))
+                }
+            },
+            onNext = {
+                nextImage?.let {
+                    viewingImage = ViewedGalleryImage(it, galleryPreviewMemoryCacheKey(it, THUMBNAIL_CACHE_VARIANT))
+                }
+            },
             onDismiss = { viewingImage = null },
         )
     }
@@ -190,11 +285,14 @@ private fun IndividualGalleryGrid(
     previewLoader: GalleryPreviewLoader,
     selectedCount: Int,
     onToggleSelected: (GalleryImage) -> Unit,
-    onViewImage: (GalleryImage, android.graphics.Bitmap?) -> Unit,
+    onViewImage: (GalleryImage, String?) -> Unit,
     onLoadMore: () -> Unit,
 ) {
+    val gridState = rememberLazyGridState()
+    PrefetchVisibleGalleryImages(gridState, state.items, previewLoader)
     LazyVerticalGrid(
         columns = GridCells.Adaptive(110.dp),
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -206,7 +304,8 @@ private fun IndividualGalleryGrid(
                 selectionActive = selectedCount > 0,
                 previewLoader = previewLoader,
                 onToggleSelected = { onToggleSelected(image) },
-                onViewImage = { bitmap -> onViewImage(image, bitmap) },
+                onViewImage = { memoryCacheKey -> onViewImage(image, memoryCacheKey) },
+                modifier = Modifier.animateItem(),
             )
         }
         state.nextCursor?.let { cursor ->
@@ -222,10 +321,16 @@ private fun IndividualGalleryGrid(
 private fun GroupedGalleryGrid(
     groups: List<GalleryCardGroup>,
     previewLoader: GalleryPreviewLoader,
-    onViewImage: (GalleryImage, android.graphics.Bitmap?) -> Unit,
+    onViewImage: (GalleryImage, String?) -> Unit,
     nextCursor: String?,
     onLoadMore: () -> Unit,
 ) {
+    LaunchedEffect(groups, previewLoader.accessToken) {
+        groups
+            .take(GRID_PREFETCH_EXTRA_ITEMS)
+            .flatMap { it.items.take(GROUP_THUMBNAIL_LIMIT) }
+            .forEach { prefetchGalleryThumbnail(previewLoader, it) }
+    }
     LazyVerticalGrid(
         columns = GridCells.Adaptive(160.dp),
         modifier = Modifier.fillMaxSize(),
@@ -233,11 +338,13 @@ private fun GroupedGalleryGrid(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(groups, key = { it.cardName ?: "__unknown_card_group__" }) { group ->
-            GalleryGroupCard(
-                group = group,
-                previewLoader = previewLoader,
-                onViewImage = onViewImage,
-            )
+            Box(modifier = Modifier.animateItem()) {
+                GalleryGroupCard(
+                    group = group,
+                    previewLoader = previewLoader,
+                    onViewImage = onViewImage,
+                )
+            }
         }
         nextCursor?.let { cursor ->
             item(key = "load-more", span = { GridItemSpan(maxLineSpan) }) {
@@ -275,6 +382,43 @@ private fun LoadMoreRow(
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator(modifier = Modifier.size(24.dp))
+    }
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun PrefetchVisibleGalleryImages(
+    gridState: LazyGridState,
+    images: List<GalleryImage>,
+    previewLoader: GalleryPreviewLoader,
+) {
+    LaunchedEffect(gridState, images, previewLoader.accessToken) {
+        if (previewLoader.accessToken == null) return@LaunchedEffect
+        snapshotFlow {
+            val visibleIndexes =
+                gridState
+                    .layoutInfo
+                    .visibleItemsInfo
+                    .map { it.index }
+                    .filter { it in images.indices }
+            val first = visibleIndexes.minOrNull() ?: 0
+            val last = visibleIndexes.maxOrNull() ?: -1
+            if (last < 0) {
+                images
+                    .take(GRID_PREFETCH_EXTRA_ITEMS)
+                    .map { it.name }
+            } else {
+                images
+                    .subList(first, minOf(images.size, last + GRID_PREFETCH_EXTRA_ITEMS + 1))
+                    .map { it.name }
+            }
+        }.distinctUntilChanged()
+            .collect { names ->
+                val byName = images.associateBy { it.name }
+                names.forEach { name ->
+                    byName[name]?.let { prefetchGalleryThumbnail(previewLoader, it) }
+                }
+            }
     }
 }
 
@@ -433,7 +577,7 @@ private fun viewModeLabel(mode: GalleryViewMode): String =
 private fun GalleryGroupCard(
     group: GalleryCardGroup,
     previewLoader: GalleryPreviewLoader,
-    onViewImage: (GalleryImage, android.graphics.Bitmap?) -> Unit,
+    onViewImage: (GalleryImage, String?) -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -481,7 +625,9 @@ private fun GalleryGroupCard(
                                     height = GROUP_THUMBNAIL_HEIGHT_DP.dp,
                                 )
                                 .clip(TileShape)
-                                .clickable { onViewImage(image, null) },
+                                .clickable {
+                                    onViewImage(image, galleryPreviewMemoryCacheKey(image, THUMBNAIL_CACHE_VARIANT))
+                                },
                     ) {
                         GalleryPreview(
                             image = image,

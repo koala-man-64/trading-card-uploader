@@ -13,6 +13,7 @@ internal data class UploadStatusUi(
     val tone: StatusTone,
     val inProgress: Boolean,
     val canRetry: Boolean,
+    val canRemove: Boolean,
 )
 
 internal fun UploadStatus.toUi(): UploadStatusUi =
@@ -25,6 +26,7 @@ internal fun UploadStatus.toUi(): UploadStatusUi =
                 tone = StatusTone.Neutral,
                 inProgress = false,
                 canRetry = false,
+                canRemove = true,
             )
 
         UploadStatus.RequestingSas,
@@ -36,6 +38,7 @@ internal fun UploadStatus.toUi(): UploadStatusUi =
                 tone = StatusTone.Accent,
                 inProgress = true,
                 canRetry = false,
+                canRemove = true,
             )
 
         UploadStatus.RetryWaiting ->
@@ -44,6 +47,7 @@ internal fun UploadStatus.toUi(): UploadStatusUi =
                 tone = StatusTone.Accent,
                 inProgress = true,
                 canRetry = false,
+                canRemove = true,
             )
 
         UploadStatus.Complete ->
@@ -52,6 +56,7 @@ internal fun UploadStatus.toUi(): UploadStatusUi =
                 tone = StatusTone.Success,
                 inProgress = false,
                 canRetry = false,
+                canRemove = false,
             )
 
         UploadStatus.FailedTerminal ->
@@ -60,6 +65,7 @@ internal fun UploadStatus.toUi(): UploadStatusUi =
                 tone = StatusTone.Error,
                 inProgress = false,
                 canRetry = true,
+                canRemove = true,
             )
     }
 

@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -87,6 +88,45 @@ class GalleryRepositoryTest {
             "https://api.example.test/api/v1/admin/gallery/image?category=processed&name=processed%2Fcard+one.jpg",
             resolved,
         )
+    }
+
+    @Test
+    fun previewRequestSpecsPreferPreviewUrlThenEndpointWithScopedBearer() {
+        val image =
+            GalleryImage(
+                category = GalleryCategory.Processed.wireValue,
+                name = "processed/card one.jpg",
+                sourceBlobName = "raw/card one.jpg",
+                size = 1,
+                lastModifiedUtc = null,
+                previewUrl = "https://storage.example.test/processed/card-one.jpg?sig=abc",
+                canCascade = true,
+            )
+
+        val specs =
+            galleryPreviewRequestSpecs(
+                apiBaseUrl = "https://api.example.test/api/",
+                image = image,
+                cacheVariant = "thumbnail",
+            )
+
+        assertEquals(
+            listOf(
+                "https://storage.example.test/processed/card-one.jpg?sig=abc",
+                "https://api.example.test/api/v1/admin/gallery/image?category=processed&name=processed%2Fcard+one.jpg",
+            ),
+            specs.map { it.url },
+        )
+        assertFalse(specs[0].attachBearer)
+        assertTrue(specs[1].attachBearer)
+        assertFalse(
+            shouldAttachGalleryBearer(
+                apiBaseUrl = "https://api.example.test/api/",
+                url = "https://api.example.test/static/processed/card-one.jpg",
+            ),
+        )
+        assertEquals(galleryPreviewMemoryCacheKey(image, "thumbnail"), specs[0].memoryCacheKey)
+        assertFalse(galleryPreviewMemoryCacheKey(image, "viewer") == specs[0].memoryCacheKey)
     }
 
     @Test
