@@ -9,6 +9,7 @@ import com.tradingcards.uploader.model.GallerySourceActionRequest
 import com.tradingcards.uploader.model.GallerySourceActionResponse
 import com.tradingcards.uploader.model.SasRequest
 import com.tradingcards.uploader.model.SasResponse
+import com.tradingcards.uploader.model.ScannerStatusResponse
 import okhttp3.OkHttpClient
 import retrofit2.Response
 import retrofit2.Retrofit
@@ -54,6 +55,11 @@ interface SasIssuerClient {
         @Header("Authorization") authorization: String,
         @Body request: GallerySourceActionRequest,
     ): Response<GallerySourceActionResponse>
+
+    @GET("v1/admin/scanner/status")
+    suspend fun scannerStatus(
+        @Header("Authorization") authorization: String,
+    ): Response<ScannerStatusResponse>
 
     companion object {
         fun create(

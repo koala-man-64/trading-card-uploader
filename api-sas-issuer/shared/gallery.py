@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -160,6 +160,20 @@ def scanner_request(
             headers=dict(exc.headers.items()),
             body=exc.read(),
         )
+    except TimeoutError as exc:
+        raise scanner_timeout(settings) from exc
+    except URLError as exc:
+        if isinstance(exc.reason, TimeoutError):
+            raise scanner_timeout(settings) from exc
+        raise
+
+
+def scanner_timeout(settings: Settings) -> Problem:
+    return Problem(
+        504,
+        "scanner_timeout",
+        f"Scanner gallery request timed out after {settings.scanner_timeout_seconds} seconds",
+    )
 
 
 def scanner_json(
@@ -180,6 +194,48 @@ def scanner_json(
     if not isinstance(body, dict):
         raise Problem(502, "invalid_scanner_response", "Scanner returned invalid JSON")
     return body
+
+
+def scanner_status(settings: Settings, authorization: str) -> dict[str, Any]:
+    """Reports the scanner's /api/ready state without failing the request.
+
+    A monitor endpoint must report "not configured" and "unreachable" as
+    statuses rather than errors, so this never raises for scanner-side
+    problems -- only for issues with the caller's own request.
+    """
+    if not settings.scanner_admin_base_url:
+        return {
+            "configured": False,
+            "reachable": False,
+            "statusCode": None,
+            "ready": False,
+            "scanner": None,
+        }
+    try:
+        response = scanner_request(settings, authorization, "GET", "/api/ready")
+    except (OSError, Problem):
+        # scanner_request maps timeouts to a Problem; for the monitor both
+        # timeouts and connection failures are the "unreachable" status.
+        return {
+            "configured": True,
+            "reachable": False,
+            "statusCode": None,
+            "ready": False,
+            "scanner": None,
+        }
+    try:
+        body: Any = json.loads(response.body.decode("utf-8") or "{}")
+    except (ValueError, UnicodeDecodeError):
+        body = None
+    if not isinstance(body, dict):
+        body = None
+    return {
+        "configured": True,
+        "reachable": True,
+        "statusCode": response.status_code,
+        "ready": response.status_code < 400,
+        "scanner": body,
+    }
 
 
 def scanner_gallery_images(

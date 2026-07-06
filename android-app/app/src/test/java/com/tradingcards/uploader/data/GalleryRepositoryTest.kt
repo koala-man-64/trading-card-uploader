@@ -1,5 +1,7 @@
 package com.tradingcards.uploader.data
 
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.tradingcards.uploader.model.GalleryCategory
 import com.tradingcards.uploader.model.GalleryImage
 import com.tradingcards.uploader.model.GalleryImageDeleteRequest
@@ -9,10 +11,12 @@ import com.tradingcards.uploader.model.GallerySourceActionRequest
 import com.tradingcards.uploader.model.GallerySourceActionResponse
 import com.tradingcards.uploader.model.SasRequest
 import com.tradingcards.uploader.model.SasResponse
+import com.tradingcards.uploader.model.ScannerStatusResponse
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import retrofit2.Response
@@ -86,6 +90,92 @@ class GalleryRepositoryTest {
         )
     }
 
+    @Test
+    fun previewRequestSpecsPreferPreviewUrlThenEndpointWithScopedBearer() {
+        val image =
+            GalleryImage(
+                category = GalleryCategory.Processed.wireValue,
+                name = "processed/card one.jpg",
+                sourceBlobName = "raw/card one.jpg",
+                size = 1,
+                lastModifiedUtc = null,
+                previewUrl = "https://storage.example.test/processed/card-one.jpg?sig=abc",
+                canCascade = true,
+            )
+
+        val specs =
+            galleryPreviewRequestSpecs(
+                apiBaseUrl = "https://api.example.test/api/",
+                image = image,
+                cacheVariant = "thumbnail",
+            )
+
+        assertEquals(
+            listOf(
+                "https://storage.example.test/processed/card-one.jpg?sig=abc",
+                "https://api.example.test/api/v1/admin/gallery/image?category=processed&name=processed%2Fcard+one.jpg",
+            ),
+            specs.map { it.url },
+        )
+        assertFalse(specs[0].attachBearer)
+        assertTrue(specs[1].attachBearer)
+        assertFalse(
+            shouldAttachGalleryBearer(
+                apiBaseUrl = "https://api.example.test/api/",
+                url = "https://api.example.test/static/processed/card-one.jpg",
+            ),
+        )
+        assertEquals(galleryPreviewMemoryCacheKey(image, "thumbnail"), specs[0].memoryCacheKey)
+        assertFalse(galleryPreviewMemoryCacheKey(image, "viewer") == specs[0].memoryCacheKey)
+    }
+
+    @Test
+    fun galleryImagesResponseAcceptsOptionalCardMetadata() {
+        val adapter =
+            Moshi
+                .Builder()
+                .add(KotlinJsonAdapterFactory())
+                .build()
+                .adapter(GalleryImagesResponse::class.java)
+
+        val response =
+            adapter.fromJson(
+                """
+                {
+                  "category": "processed",
+                  "nextCursor": null,
+                  "items": [
+                    {
+                      "category": "processed",
+                      "name": "processed/a.jpg",
+                      "sourceBlobName": "raw/a.jpg",
+                      "size": 1,
+                      "lastModifiedUtc": null,
+                      "previewUrl": "/api/v1/admin/gallery/image?category=processed&name=processed%2Fa.jpg",
+                      "canCascade": true,
+                      "cardName": "Pikachu",
+                      "price": "${'$'}12.50"
+                    },
+                    {
+                      "category": "processed",
+                      "name": "processed/b.jpg",
+                      "sourceBlobName": "raw/b.jpg",
+                      "size": 1,
+                      "lastModifiedUtc": null,
+                      "previewUrl": "/api/v1/admin/gallery/image?category=processed&name=processed%2Fb.jpg",
+                      "canCascade": true
+                    }
+                  ]
+                }
+                """.trimIndent(),
+            )
+
+        assertEquals("Pikachu", response?.items?.get(0)?.cardName)
+        assertEquals("$12.50", response?.items?.get(0)?.price)
+        assertEquals(null, response?.items?.get(1)?.cardName)
+        assertEquals(null, response?.items?.get(1)?.price)
+    }
+
     private fun scannerNotConfiguredClient(): SasIssuerClient =
         object : SasIssuerClient {
             override suspend fun healthz(): Response<Map<String, String>> = error("healthz was not expected")
@@ -128,5 +218,8 @@ class GalleryRepositoryTest {
                 authorization: String,
                 request: GallerySourceActionRequest,
             ): Response<GallerySourceActionResponse> = error("reprocessGallerySource was not expected")
+
+            override suspend fun scannerStatus(authorization: String): Response<ScannerStatusResponse> =
+                error("scannerStatus was not expected")
         }
 }

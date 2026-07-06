@@ -4,6 +4,10 @@ import android.content.Context
 import coil.ImageLoader
 import com.tradingcards.uploader.BuildConfig
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
+
+private const val API_CONNECT_TIMEOUT_SECONDS = 15L
+private const val API_IO_TIMEOUT_SECONDS = 45L
 
 /**
  * App-scoped network singletons. Building a fresh [OkHttpClient] (and the
@@ -24,6 +28,10 @@ object NetworkClients {
     fun okHttpClient(): OkHttpClient =
         okHttpClient ?: synchronized(this) {
             okHttpClient ?: OkHttpClient.Builder()
+                .connectTimeout(API_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .readTimeout(API_IO_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .writeTimeout(API_IO_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .callTimeout(API_IO_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .build()
                 .also { okHttpClient = it }
         }

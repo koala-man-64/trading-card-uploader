@@ -12,10 +12,13 @@ from azure.core.exceptions import ResourceNotFoundError
 from shared import gallery as gallery_module
 from shared.config import DEFAULT_AZURE_STORAGE_API_VERSION, Settings
 from shared.gallery import (
+    ScannerResponse,
     delete_raw_source_group,
     list_raw_images,
     require_gallery_admin,
     require_raw_image_blob_name,
+    scanner_request,
+    scanner_status,
 )
 from shared.models import Claims, Problem
 from shared.sas import ConnectionStringSasSigner
@@ -157,6 +160,30 @@ def test_raw_gallery_list_paginates_and_filters_images() -> None:
     assert "sig=" in payload["items"][0]["previewUrl"]
 
 
+def test_scanner_request_maps_timeout_to_problem(monkeypatch: pytest.MonkeyPatch) -> None:
+    def timed_out(*_args: object, **_kwargs: object) -> object:
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(gallery_module, "urlopen", timed_out)
+    configured = replace(
+        settings(),
+        scanner_admin_base_url="https://scanner.example.test",
+        scanner_timeout_seconds=30,
+    )
+
+    with pytest.raises(Problem) as exc:
+        scanner_request(
+            configured,
+            "Bearer token",
+            "GET",
+            "/api/v1/admin/gallery/images?category=processed&limit=50",
+        )
+
+    assert exc.value.status_code == 504
+    assert exc.value.code == "scanner_timeout"
+    assert exc.value.message == "Scanner gallery request timed out after 30 seconds"
+
+
 def test_gallery_preview_sas_is_read_only() -> None:
     url = ConnectionStringSasSigner(settings()).sign_read(
         "raw/a.jpg",
@@ -168,6 +195,118 @@ def test_gallery_preview_sas_is_read_only() -> None:
     assert "c" not in permissions
     assert "w" not in permissions
     assert "d" not in permissions
+
+
+def test_scanner_status_reports_not_configured_without_calling_scanner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_scanner_call(*args: object, **kwargs: object) -> ScannerResponse:
+        raise AssertionError("scanner should not be called")
+
+    monkeypatch.setattr(gallery_module, "scanner_request", unexpected_scanner_call)
+
+    payload = scanner_status(settings(), "Bearer token")
+
+    assert payload == {
+        "configured": False,
+        "reachable": False,
+        "statusCode": None,
+        "ready": False,
+        "scanner": None,
+    }
+
+
+def test_scanner_status_passes_ready_body_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    def scanner_request(
+        _settings: Settings,
+        authorization: str,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+    ) -> ScannerResponse:
+        assert (authorization, method, path) == ("Bearer token", "GET", "/api/ready")
+        return ScannerResponse(
+            status_code=200,
+            headers={},
+            body=b'{"status": "ready", "components": {"models": {"state": "ready"}}}',
+        )
+
+    monkeypatch.setattr(gallery_module, "scanner_request", scanner_request)
+    configured = replace(settings(), scanner_admin_base_url="http://scanner.test")
+
+    payload = scanner_status(configured, "Bearer token")
+
+    assert payload == {
+        "configured": True,
+        "reachable": True,
+        "statusCode": 200,
+        "ready": True,
+        "scanner": {"status": "ready", "components": {"models": {"state": "ready"}}},
+    }
+
+
+def test_scanner_status_reports_not_ready_for_error_statuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    def scanner_request(*args: object, **kwargs: object) -> ScannerResponse:
+        return ScannerResponse(status_code=503, headers={}, body=b'{"status": "warming_up"}')
+
+    monkeypatch.setattr(gallery_module, "scanner_request", scanner_request)
+    configured = replace(settings(), scanner_admin_base_url="http://scanner.test")
+
+    payload = scanner_status(configured, "Bearer token")
+
+    assert payload["ready"] is False
+    assert payload["reachable"] is True
+    assert payload["statusCode"] == 503
+    assert payload["scanner"] == {"status": "warming_up"}
+
+
+def test_scanner_status_reports_unreachable_scanner(monkeypatch: pytest.MonkeyPatch) -> None:
+    def scanner_request(*args: object, **kwargs: object) -> ScannerResponse:
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(gallery_module, "scanner_request", scanner_request)
+    configured = replace(settings(), scanner_admin_base_url="http://scanner.test")
+
+    payload = scanner_status(configured, "Bearer token")
+
+    assert payload == {
+        "configured": True,
+        "reachable": False,
+        "statusCode": None,
+        "ready": False,
+        "scanner": None,
+    }
+
+
+def test_scanner_status_reports_timed_out_scanner_as_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def timed_out(*_args: object, **_kwargs: object) -> object:
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(gallery_module, "urlopen", timed_out)
+    configured = replace(settings(), scanner_admin_base_url="http://scanner.test")
+
+    payload = scanner_status(configured, "Bearer token")
+
+    assert payload == {
+        "configured": True,
+        "reachable": False,
+        "statusCode": None,
+        "ready": False,
+        "scanner": None,
+    }
+
+
+def test_scanner_status_tolerates_non_json_ready_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    def scanner_request(*args: object, **kwargs: object) -> ScannerResponse:
+        return ScannerResponse(status_code=200, headers={}, body=b"<html>gateway</html>")
+
+    monkeypatch.setattr(gallery_module, "scanner_request", scanner_request)
+    configured = replace(settings(), scanner_admin_base_url="http://scanner.test")
+
+    payload = scanner_status(configured, "Bearer token")
+
+    assert payload["ready"] is True
+    assert payload["scanner"] is None
 
 
 def test_delete_raw_source_group_skips_scanner_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:

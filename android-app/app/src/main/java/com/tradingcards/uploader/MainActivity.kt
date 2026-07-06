@@ -15,9 +15,17 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -52,9 +60,11 @@ import com.tradingcards.uploader.data.UploadRepository
 import com.tradingcards.uploader.ui.CaptureScreen
 import com.tradingcards.uploader.ui.CaptureScreenActions
 import com.tradingcards.uploader.ui.GalleryScreen
+import com.tradingcards.uploader.ui.MonitorScreen
 import com.tradingcards.uploader.ui.theme.UploaderTheme
 import com.tradingcards.uploader.viewmodel.CaptureViewModel
 import com.tradingcards.uploader.viewmodel.GalleryViewModel
+import com.tradingcards.uploader.viewmodel.MonitorViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -62,7 +72,12 @@ import java.io.File
 private object Routes {
     const val CAPTURE = "capture"
     const val GALLERY = "gallery"
+    const val MONITOR = "monitor"
 }
+
+private const val TAB_TRANSITION_MS = 120
+private const val TAB_EXIT_TRANSITION_MS = 90
+private const val TAB_TRANSITION_DISTANCE_DIVISOR = 16
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,15 +114,40 @@ private fun UploaderApp(
             bottomBar = { AppBottomBar(navController) },
         ) { contentPadding ->
             NavHost(navController = navController, startDestination = Routes.CAPTURE) {
-                composable(Routes.CAPTURE) {
+                composable(
+                    Routes.CAPTURE,
+                    enterTransition = { appTabEnterTransition() },
+                    exitTransition = { appTabExitTransition() },
+                    popEnterTransition = { appTabEnterTransition() },
+                    popExitTransition = { appTabExitTransition() },
+                ) {
                     CaptureRoute(
                         modifier = Modifier.padding(contentPadding),
                         repository = repository,
                         authRepository = authRepository,
                     )
                 }
-                composable(Routes.GALLERY) {
+                composable(
+                    Routes.GALLERY,
+                    enterTransition = { appTabEnterTransition() },
+                    exitTransition = { appTabExitTransition() },
+                    popEnterTransition = { appTabEnterTransition() },
+                    popExitTransition = { appTabExitTransition() },
+                ) {
                     GalleryRoute(
+                        modifier = Modifier.padding(contentPadding),
+                        galleryRepository = galleryRepository,
+                        authRepository = authRepository,
+                    )
+                }
+                composable(
+                    Routes.MONITOR,
+                    enterTransition = { appTabEnterTransition() },
+                    exitTransition = { appTabExitTransition() },
+                    popEnterTransition = { appTabEnterTransition() },
+                    popExitTransition = { appTabExitTransition() },
+                ) {
+                    MonitorRoute(
                         modifier = Modifier.padding(contentPadding),
                         galleryRepository = galleryRepository,
                         authRepository = authRepository,
@@ -117,6 +157,18 @@ private fun UploaderApp(
         }
     }
 }
+
+private fun appTabEnterTransition(): EnterTransition =
+    fadeIn(animationSpec = tween(TAB_TRANSITION_MS)) +
+        slideInHorizontally(animationSpec = tween(TAB_TRANSITION_MS)) { width ->
+            width / TAB_TRANSITION_DISTANCE_DIVISOR
+        }
+
+private fun appTabExitTransition(): ExitTransition =
+    fadeOut(animationSpec = tween(TAB_EXIT_TRANSITION_MS)) +
+        slideOutHorizontally(animationSpec = tween(TAB_EXIT_TRANSITION_MS)) { width ->
+            -width / TAB_TRANSITION_DISTANCE_DIVISOR
+        }
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
@@ -134,6 +186,12 @@ private fun AppBottomBar(navController: NavHostController) {
             onClick = { navController.navigateToTab(Routes.GALLERY) },
             label = { Text(stringResource(R.string.nav_gallery)) },
             icon = { Icon(Icons.Default.Collections, contentDescription = null) },
+        )
+        NavigationBarItem(
+            selected = currentRoute == Routes.MONITOR,
+            onClick = { navController.navigateToTab(Routes.MONITOR) },
+            label = { Text(stringResource(R.string.nav_monitor)) },
+            icon = { Icon(Icons.Default.Insights, contentDescription = null) },
         )
     }
 }
@@ -254,6 +312,36 @@ private fun GalleryRoute(
         onClearSelection = viewModel::onClearSelection,
         onDeleteSelected = { viewModel.onDeleteSelected(activity) },
         onReprocessSelected = { viewModel.onReprocessSelected(activity) },
+        onLoadMore = viewModel::onLoadMore,
+    )
+}
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Composable
+private fun MonitorRoute(
+    modifier: Modifier,
+    galleryRepository: GalleryRepository,
+    authRepository: MsalAuthRepository,
+) {
+    val activity = LocalContext.current as Activity
+    val viewModel: MonitorViewModel =
+        viewModel(
+            factory =
+                viewModelFactory {
+                    initializer { MonitorViewModel(galleryRepository, authRepository) }
+                },
+        )
+    val state by viewModel.state.collectAsState()
+
+    DisposableEffect(viewModel) {
+        viewModel.onScreenEntered(activity)
+        onDispose { viewModel.onScreenExited() }
+    }
+
+    MonitorScreen(
+        modifier = modifier,
+        state = state,
+        onRefresh = { viewModel.onRefresh(activity) },
     )
 }
 

@@ -61,6 +61,8 @@ data class GalleryImage(
     val lastModifiedUtc: String?,
     val previewUrl: String,
     val canCascade: Boolean,
+    val cardName: String? = null,
+    val price: String? = null,
 )
 
 data class GalleryImagesResponse(
@@ -68,6 +70,51 @@ data class GalleryImagesResponse(
     val items: List<GalleryImage>,
     val nextCursor: String?,
 )
+
+data class GalleryCardGroup(
+    val cardName: String?,
+    val items: List<GalleryImage>,
+    val priceSummary: String?,
+)
+
+const val MULTIPLE_PRICES_SUMMARY = "Multiple prices"
+
+private val WHITESPACE_REGEX = Regex("\\s+")
+
+fun GalleryImage.cardDisplayName(): String? = normalizedMetadataText(cardName)
+
+fun GalleryImage.cardPriceText(): String? = normalizedMetadataText(price)
+
+fun groupedGalleryImagesByCardName(items: List<GalleryImage>): List<GalleryCardGroup> =
+    items
+        .groupBy { image -> image.cardDisplayName()?.lowercase() }
+        .map { (_, groupItems) ->
+            val sortedItems = groupItems.sortedBy { it.name }
+            val displayName = sortedItems.firstNotNullOfOrNull { it.cardDisplayName() }
+            GalleryCardGroup(
+                cardName = displayName,
+                items = sortedItems,
+                priceSummary = priceSummary(sortedItems),
+            )
+        }.sortedWith(
+            compareBy<GalleryCardGroup> { it.cardName == null }
+                .thenBy { it.cardName?.lowercase().orEmpty() },
+        )
+
+private fun priceSummary(items: List<GalleryImage>): String? {
+    val prices = items.mapNotNull { it.cardPriceText() }.distinct()
+    return when (prices.size) {
+        0 -> null
+        1 -> prices.single()
+        else -> MULTIPLE_PRICES_SUMMARY
+    }
+}
+
+private fun normalizedMetadataText(value: String?): String? =
+    value
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { WHITESPACE_REGEX.replace(it, " ") }
 
 data class GallerySourceActionRequest(
     val sourceBlobName: String,
